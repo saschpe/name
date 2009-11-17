@@ -1,41 +1,18 @@
 #include "clock.h"
+#include "name.h"
 
-#include <glib.h>
-
+#include <arpa/inet.h>
+#include <limits.h>
+#include <netinet/in.h>
+#include <poll.h>
+#include <stdio.h>
+#include <stdlib.h>
+#include <string.h>
 #include <sys/types.h>
 #include <sys/socket.h>
-#include <arpa/inet.h>
-#include <netinet/in.h>
-#include <string.h>
-#include <stdlib.h>
-#include <stdio.h>
-#include <limits.h>
 
-#define VVS_PORT 57539
-
-/*
-    TYPEDEFS
-*/
-
-typedef enum packet_type {
-    HELLO = 1,
-    GET_ID,
-    GET_NAME,
-    NAME_ID
-} packet_type_t;
-
-typedef struct packet {
-    unsigned short sender_id;
-    unsigned short type;
-    union {
-        unsigned short id;
-        char name[12];
-    } payload;
-} __attribute((packed)) packet_t;
-
-/*
-    GLOBALS
-*/
+#define NAME_PORT 57539
+#define POLL_TIMEOUT 10000
 
 static GHashTable *g_id_name_hash_table;
 static unsigned short g_my_id;
@@ -52,12 +29,26 @@ void print_usage(const char *prog_name)
            "    NAME : string of max. 11 characters\n", prog_name);
 }
 
-void check_name_or_send_get_name(struct packet pack, int sock, struct sockaddr_in sa, struct sockaddr_in csa)
+void send_HELLO(int sock, struct sockaddr_in sa)
+{
+    struct packet pack;
+
+    sa.sin_addr.s_addr = htonl(INADDR_BROADCAST);
+    memset(&pack, 0, sizeof(pack));
+    pack.sender_id = htons(g_my_id);
+    pack.type = htons(HELLO);
+    /* inet_addr("127.0.0.1"); */
+    if (sendto(sock, (void *)&pack, sizeof(pack), 0, (struct sockaddr *)&sa, sizeof(sa)) < 0) {
+        perror("sendto"); exit(6);
+    }
+}
+
+void send_GET_NAME(struct packet pack, int sock, struct sockaddr_in sa, struct sockaddr_in csa)
 {
     struct packet tmp;
 
     const char *name = g_hash_table_lookup(g_id_name_hash_table, &pack.sender_id);
-    if (name != NULL || strlen(name) == 0) {
+    if (name != NULL && strlen(name) == 0) {
         printf("  No name stored, send a GET_NAME message to '%d'.\n", pack.sender_id);
         /* send GET_NAME message */
         struct packet tmp;
@@ -72,7 +63,7 @@ void check_name_or_send_get_name(struct packet pack, int sock, struct sockaddr_i
     }
 }
 
-void send_name_id(int sock, struct sockaddr_in sa, struct sockaddr_in csa)
+void send_NAME_ID(int sock, struct sockaddr_in sa, struct sockaddr_in csa)
 {
     struct packet tmp;
 
@@ -112,7 +103,6 @@ int main(int argc, char *argv[])
 {
     int sock;
     struct sockaddr_in sa;
-    struct packet pack;
 
     g_my_id = getpid();
     g_id_name_hash_table = g_hash_table_new(g_int_hash, g_int_equal);
@@ -126,7 +116,7 @@ int main(int argc, char *argv[])
 
     memset(&sa, 0, sizeof(sa));
     sa.sin_family = AF_INET;
-    sa.sin_port = htons(VVS_PORT);
+    sa.sin_port = htons(NAME_PORT);
     sa.sin_addr.s_addr = htonl(INADDR_ANY);
 
     if (bind(sock, (struct sockaddr *)&sa, sizeof(sa))) {
@@ -140,67 +130,75 @@ int main(int argc, char *argv[])
     }
 
     /* broadcast HELLO message */
-    sa.sin_addr.s_addr = htonl(INADDR_BROADCAST);
-    memset(&pack, 0, sizeof(pack));
-    pack.sender_id = htons(g_my_id);
-    pack.type = htons(HELLO);
-    /* inet_addr("127.0.0.1"); */
-    if (sendto(sock, (void *)&pack, sizeof(pack), 0, (struct sockaddr *)&sa, sizeof(sa)) < 0) {
-        perror("sendto"); exit(6);
-    }
+    send_HELLO(sock, sa);
+
+    struct pollfd pfd[1];
+    pfd[0].fd = sock;
+    pfd[0].events = POLLIN;
 
     /* printf("listening for datagrams...\n"); */
     while (1) {
-        int bytes_read;
-        struct sockaddr_in csa;
-        socklen_t csalen;
+        int ret = poll(pfd, 1, POLL_TIMEOUT);
 
-        if ((bytes_read  = recvfrom(sock, &pack, sizeof(pack), 0, (struct sockaddr *)&csa, &csalen)) < 0) {
-            fprintf(stderr, "Error while reading datagram!\n");
-        } else {
-            unsigned short sender_id = ntohs(pack.sender_id);
-            switch (pack.type) {
-                case HELLO:
-                    printf("HELLO message received from '%d'.\n", sender_id);
-                    g_hash_table_insert(g_id_name_hash_table, &sender_id, "");
-                    if (sender_id != g_my_id) {
-                        check_name_or_send_get_name(pack, sock, sa, csa);
-                    } else {
-                        printf("Discarded message sent by myself.\n");
+        if (ret == 0) {
+            printf("Timeout, send another HELLO\n");
+            send_HELLO(sock, sa);
+        } else if (ret > 0) {
+            if (pfd[0].revents & POLLIN) {
+                int bytes_read;
+                struct sockaddr_in csa;
+                socklen_t csalen;
+                struct packet pack;
+
+                if ((bytes_read  = recvfrom(sock, &pack, sizeof(pack), 0, (struct sockaddr *)&csa, &csalen)) < 0) {
+                    fprintf(stderr, "Error while reading datagram!\n");
+                } else {
+                    unsigned short sender_id = ntohs(pack.sender_id);
+                    switch (ntohs(pack.type)) {
+                        case HELLO:
+                            printf("HELLO message received from '%d'.\n", sender_id);
+                            g_hash_table_insert(g_id_name_hash_table, &sender_id, "");
+                            if (sender_id != g_my_id) {
+                                send_GET_NAME(pack, sock, sa, csa);
+                            } else {
+                                printf("  Discarded message sent by myself.\n");
+                            }
+                            break;
+                        case GET_ID:
+                            printf("GET_ID message received from '%d' for '%s'.\n", sender_id, pack.payload.name);
+                            if (sender_id != g_my_id && strncmp(pack.payload.name, g_my_name, strlen(g_my_name))) {
+                                printf("  Message was for me, send NAME_ID message to '%d'.\n", sender_id);
+
+                                send_NAME_ID(sock, sa, csa);
+                            } else {
+                                printf("  Discarded message either sent by me or not destinated to me.\n");
+                            }
+                            break;
+                        case GET_NAME:
+                            {   // Stupid C89, needs a block inside 'case' to allow variable declarations
+                                unsigned short payload_id = ntohs(pack.payload.id);
+
+                                printf("GET_NAME message received from '%d' for '%hd'.\n", sender_id, payload_id);
+                                if (sender_id != g_my_id && payload_id == g_my_id) {
+                                    printf("  Message was for me, send NAME_ID message to '%d'.\n", sender_id);
+
+                                    send_GET_NAME(pack, sock, sa, csa);
+                                    send_NAME_ID(sock, sa, csa);
+                                } else {
+                                    printf("  Discarded message either sent by me or not destinated to me.\n");
+                                }
+                            } break;
+                        case NAME_ID:
+                            pack.payload.name[12] = '\0';
+                            printf("NAME_ID message received from '%d' with name '%s'.\n", sender_id, pack.payload.name);
+                            g_hash_table_insert(g_id_name_hash_table, &sender_id, pack.payload.name);
+                            printf("  Stored name '%s' for '%d' in local database.\n", g_hash_table_lookup(g_id_name_hash_table, &sender_id), sender_id);
+                            break;
                     }
-                    break;
-                case GET_ID:
-                    printf("GET_ID message received from '%d' for '%s'.\n", sender_id, pack.payload.name);
-                    if (sender_id != g_my_id && strncmp(pack.payload.name, g_my_name, strlen(g_my_name))) {
-                        printf("  Message was for me, send NAME_ID message to '%d'.\n", sender_id);
-
-                        send_name_id(sock, sa, csa);
-                    } else {
-                        printf("Discarded message either sent by me or not destinated to me.\n");
-                    }
-                    break;
-                case GET_NAME:
-                    {
-                        unsigned short payload_id = ntohs(pack.payload.id);
-
-                        printf("GET_NAME message received from '%d' for '%hd'.\n", sender_id, payload_id);
-                        if (sender_id != g_my_id && payload_id == g_my_id) {
-                            printf("  Message was for me, send NAME_ID message to '%d'.\n", sender_id);
-
-                            check_name_or_send_get_name(pack, sock, sa, csa);
-                            send_name_id(sock, sa, csa);
-                        } else {
-                            printf("Discarded message either sent by me or not destinated to me.\n");
-                        }
-                    } break;
-                case NAME_ID:
-                    pack.payload.name[12] = '\0';
-                    printf("NAME_ID message received from '%d' with name '%s'.\n", sender_id, pack.payload.name);
-                    g_hash_table_insert(g_id_name_hash_table, &sender_id, pack.payload.name);
-                    printf("  Stored name '%s' for '%d' in local database.\n", g_hash_table_lookup(g_id_name_hash_table, &sender_id), sender_id);
-                    break;
+                }
             }
         }
+
     }
     g_hash_table_destroy(g_id_name_hash_table);
     return 0;
