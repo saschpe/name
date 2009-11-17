@@ -43,19 +43,24 @@ void send_HELLO(int sock, struct sockaddr_in sa)
     }
 }
 
-void send_GET_NAME(struct packet pack, int sock, struct sockaddr_in sa, struct sockaddr_in csa)
+/**
+ * Send a GET_NAME package.
+ *
+ * sender_id has to be in network byte order
+ */
+void send_GET_NAME(int sender_id, int sock, struct sockaddr_in sa, struct sockaddr_in csa)
 {
     struct packet tmp;
 
-    const char *name = g_hash_table_lookup(g_id_name_hash_table, &pack.sender_id);
+    const char *name = g_hash_table_lookup(g_id_name_hash_table, &sender_id);
     if (name != NULL && strlen(name) == 0) {
-        printf("  No name stored, send a GET_NAME message to '%d'.\n", pack.sender_id);
+        printf("  No name stored, send a GET_NAME message to '%d'.\n", sender_id);
         /* send GET_NAME message */
         struct packet tmp;
         memset(&tmp, 0, sizeof(tmp));
         tmp.sender_id = htons(g_my_id);
         tmp.type = htons(GET_NAME);
-        tmp.payload.id = htons(pack.sender_id);
+        tmp.payload.id = sender_id;
         sa.sin_addr.s_addr = csa.sin_addr.s_addr;
         if (sendto(sock, (void *)&tmp, sizeof(tmp), 0, (struct sockaddr *)&sa, sizeof(sa)) < 0) {
             perror("sendto");
@@ -141,7 +146,7 @@ int main(int argc, char *argv[])
         int ret = poll(pfd, 1, POLL_TIMEOUT);
 
         if (ret == 0) {
-            printf("Timeout, send another HELLO\n");
+            printf("  Timeout, send another HELLO\n");
             send_HELLO(sock, sa);
         } else if (ret > 0) {
             if (pfd[0].revents & POLLIN) {
@@ -159,7 +164,7 @@ int main(int argc, char *argv[])
                             printf("HELLO message received from '%d'.\n", sender_id);
                             g_hash_table_insert(g_id_name_hash_table, &sender_id, "");
                             if (sender_id != g_my_id) {
-                                send_GET_NAME(pack, sock, sa, csa);
+                                send_GET_NAME(sender_id, sock, sa, csa);
                             } else {
                                 printf("  Discarded message sent by myself.\n");
                             }
@@ -168,7 +173,6 @@ int main(int argc, char *argv[])
                             printf("GET_ID message received from '%d' for '%s'.\n", sender_id, pack.payload.name);
                             if (sender_id != g_my_id && strncmp(pack.payload.name, g_my_name, strlen(g_my_name))) {
                                 printf("  Message was for me, send NAME_ID message to '%d'.\n", sender_id);
-
                                 send_NAME_ID(sock, sa, csa);
                             } else {
                                 printf("  Discarded message either sent by me or not destinated to me.\n");
@@ -177,12 +181,10 @@ int main(int argc, char *argv[])
                         case GET_NAME:
                             {   // Stupid C89, needs a block inside 'case' to allow variable declarations
                                 unsigned short payload_id = ntohs(pack.payload.id);
-
                                 printf("GET_NAME message received from '%d' for '%hd'.\n", sender_id, payload_id);
                                 if (sender_id != g_my_id && payload_id == g_my_id) {
+                                    send_GET_NAME(sender_id, sock, sa, csa);
                                     printf("  Message was for me, send NAME_ID message to '%d'.\n", sender_id);
-
-                                    send_GET_NAME(pack, sock, sa, csa);
                                     send_NAME_ID(sock, sa, csa);
                                 } else {
                                     printf("  Discarded message either sent by me or not destinated to me.\n");

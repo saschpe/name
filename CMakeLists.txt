@@ -8,7 +8,6 @@ include_directories(${GTK_INCLUDE_DIR})
 set(name_SRCS
     src/main.c
 )
-
 set(name_OBJS
     obj/clock.o
 )
