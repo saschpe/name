@@ -38,7 +38,7 @@ typedef struct ns_packet {
 typedef struct ns_peer
 {
     char name[12];
-    int last_hello;
+    long long last_hello;
 } ns_peer_t;
 
 void ns_init(int *sock, struct sockaddr_in *sa, int port);
