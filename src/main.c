@@ -3,7 +3,6 @@
 #include "name.h"
 
 #include <arpa/inet.h>
-#include <limits.h>
 #include <netinet/in.h>
 #include <poll.h>
 #include <stdio.h>
@@ -11,6 +10,9 @@
 #include <string.h>
 #include <sys/types.h>
 #include <sys/socket.h>
+
+#define PORT 57539
+#define POLL_TIMEOUT 10000
 
 static GHashTable *g_client_hash_table;
 static unsigned short g_my_id;
@@ -25,79 +27,6 @@ void print_usage(const char *prog_name)
     printf("Usage: %s [ID, NAME]\n"
            "    ID   : integer between 0 and 65535\n"
            "    NAME : string of max. 11 characters\n", prog_name);
-}
-
-void send_HELLO(int sock, struct sockaddr_in sa)
-{
-    struct packet pack;
-
-    sa.sin_addr.s_addr = htonl(INADDR_BROADCAST);
-    memset(&pack, 0, sizeof(pack));
-    pack.sender_id = htons(g_my_id);
-    pack.type = htons(HELLO);
-    /* inet_addr("127.0.0.1"); */
-    if (sendto(sock, (void *)&pack, sizeof(pack), 0, (struct sockaddr *)&sa, sizeof(sa)) < 0) {
-        perror("sendto"); exit(6);
-    }
-}
-
-void send_ELECTION(int sock, struct sockaddr_in sa)
-{
-    struct packet pack;
-
-    sa.sin_addr.s_addr = htonl(INADDR_BROADCAST);
-    memset(&pack, 0, sizeof(pack));
-    pack.sender_id = htons(g_my_id);
-    pack.type = htons(ELECTION);
-    /* inet_addr("127.0.0.1"); */
-    if (sendto(sock, (void *)&pack, sizeof(pack), 0, (struct sockaddr *)&sa, sizeof(sa)) < 0) {
-        perror("sendto"); exit(6);
-    }
-}
-
-/**
- * Send a GET_NAME package.
- *
- * sender_id has to be in network byte order
- */
-void send_GET_NAME(int sender_id, int sock, struct sockaddr_in sa, struct sockaddr_in csa)
-{
-    struct packet tmp;
-
-    client_info_t *info = g_hash_table_lookup(g_client_hash_table, &sender_id);
-    if (info != NULL) {
-        if (info->name != NULL && strlen(info->name) == 0) {
-            printf("  No name stored, send a GET_NAME message to '%d'.\n", sender_id);
-            /* send GET_NAME message */
-            struct packet tmp;
-            memset(&tmp, 0, sizeof(tmp));
-            tmp.sender_id = htons(g_my_id);
-            tmp.type = htons(GET_NAME);
-            tmp.payload.id = htons(sender_id);
-            sa.sin_addr.s_addr = csa.sin_addr.s_addr;
-            if (sendto(sock, (void *)&tmp, sizeof(tmp), 0, (struct sockaddr *)&sa, sizeof(sa)) < 0) {
-                perror("sendto");
-            }
-        } else {
-            printf("  Already have a name for '%d': '%s'\n", sender_id, info->name);
-        }
-    } else {
-        fprintf(stderr, "Error: The id '%d' is not stored!\n", sender_id);
-    }
-}
-
-void send_NAME_ID(int sock, struct sockaddr_in sa, struct sockaddr_in csa)
-{
-    struct packet tmp;
-
-    memset(&tmp, 0, sizeof(tmp));
-    tmp.sender_id = htons(g_my_id);
-    tmp.type = htons(NAME_ID);
-    strncpy(tmp.payload.name, g_my_name, strlen(g_my_name));
-    sa.sin_addr.s_addr = csa.sin_addr.s_addr;
-    if (sendto(sock, (void *)&tmp, sizeof(tmp), 0, (struct sockaddr *)&sa, sizeof(sa)) < 0) {
-        perror("sendto");
-    }
 }
 
 static void parse_cmdline_args(int argc, char *argv[])
@@ -129,8 +58,8 @@ int main(int argc, char *argv[])
 
     g_my_id = getpid();
     g_client_hash_table = g_hash_table_new(g_int_hash, g_int_equal);
-    clock_init();
     parse_cmdline_args(argc, argv);
+    clock_init();
 
     if ((sock = socket(AF_INET, SOCK_DGRAM, 0)) < 0) {
         perror("socket"); exit(3);
@@ -138,7 +67,7 @@ int main(int argc, char *argv[])
 
     memset(&sa, 0, sizeof(sa));
     sa.sin_family = AF_INET;
-    sa.sin_port = htons(NAME_PORT);
+    sa.sin_port = htons(PORT);
     sa.sin_addr.s_addr = htonl(INADDR_ANY);
 
     if (bind(sock, (struct sockaddr *)&sa, sizeof(sa))) {
@@ -152,7 +81,7 @@ int main(int argc, char *argv[])
     }
 
     /* broadcast HELLO message */
-    send_HELLO(sock, sa);
+    send_HELLO(sock, sa, g_my_id);
 
     struct pollfd pfd[1];
     pfd[0].fd = sock;
@@ -165,7 +94,7 @@ int main(int argc, char *argv[])
 
         if (ret == 0) {
             printf("  Timeout, send another HELLO\n");
-            send_HELLO(sock, sa);
+            send_HELLO(sock, sa, g_my_id);
         } else if (ret > 0) {
             if (pfd[0].revents & POLLIN) {
                 int bytes_read;
@@ -184,39 +113,39 @@ int main(int argc, char *argv[])
                                 if (g_hash_table_lookup(g_client_hash_table, &sender_id) == NULL) {
                                     hash_table_insert(g_client_hash_table, sender_id, "");
                                 }
-                                send_GET_NAME(sender_id, sock, sa, csa);
-                            } else {
+                                send_GET_NAME(sender_id, sock, sa, csa, g_my_id);
+                            }/* else {
                                 printf("  Discarded message sent by myself.\n");
-                            }
+                            }*/
                             break;
                         }
                         case GET_ID: {
                             printf("GET_ID message received from '%d' for '%s'.\n", sender_id, pack.payload.name);
                             if (sender_id != g_my_id && strncmp(pack.payload.name, g_my_name, strlen(g_my_name))) {
+                                printf("  Message was for me, send NAME_ID message to '%d'.\n", sender_id);
+                                send_NAME_ID(sock, sa, csa, g_my_id, g_my_name);
                                 if (g_hash_table_lookup(g_client_hash_table, &sender_id) == NULL) {
                                     hash_table_insert(g_client_hash_table, sender_id, "");
-                                    send_GET_NAME(sender_id, sock, sa, csa);
+                                    send_GET_NAME(sender_id, sock, sa, csa, g_my_id);
                                 }
-                                printf("  Message was for me, send NAME_ID message to '%d'.\n", sender_id);
-                                send_NAME_ID(sock, sa, csa);
-                            } else {
+                            }/* else {
                                 printf("  Discarded message either sent by me or not destinated to me.\n");
-                            }
+                            }*/
                             break;
                         }
                         case GET_NAME: {   // Stupid C89, needs a block inside 'case' to allow variable declarations
                             unsigned short payload_id = ntohs(pack.payload.id);
                             printf("GET_NAME message received from '%d' for '%hd'.\n", sender_id, payload_id);
                             if (sender_id != g_my_id && payload_id == g_my_id) {
+                                printf("  Message was for me, send NAME_ID message to '%d'.\n", sender_id);
+                                send_NAME_ID(sock, sa, csa, g_my_id, g_my_name);
                                 if (g_hash_table_lookup(g_client_hash_table, &sender_id) == NULL) {
                                     hash_table_insert(g_client_hash_table, sender_id, "");
-                                    send_GET_NAME(sender_id, sock, sa, csa);
+                                    send_GET_NAME(sender_id, sock, sa, csa, g_my_id);
                                 }
-                                printf("  Message was for me, send NAME_ID message to '%d'.\n", sender_id);
-                                send_NAME_ID(sock, sa, csa);
-                            } else {
+                            }/* else {
                                 printf("  Discarded message either sent by me or not destinated to me.\n");
-                            }
+                            }*/
                             break;
                         }
                         case NAME_ID: {
@@ -235,7 +164,7 @@ int main(int argc, char *argv[])
                         case START_ELECTION: {
                             printf("START_ELECTION message received from '%d'.\n", sender_id);
                             if (sender_id != g_my_id) {
-                                send_ELECTION(sock, sa);
+                                send_ELECTION(sock, sa, g_my_id);
                             }
                             break;
                         }
@@ -249,7 +178,6 @@ int main(int argc, char *argv[])
                 }
             }
         }
-
     }
     g_hash_table_foreach(g_client_hash_table, hash_table_free, NULL);
     g_hash_table_destroy(g_client_hash_table);

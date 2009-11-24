@@ -6,8 +6,9 @@ find_package(GTK 2.0 COMPONENTS glib REQUIRED)
 include_directories(${GTK_INCLUDE_DIR})
 
 set(name_SRCS
-    src/main.c
     src/hash.c
+    src/main.c
+    src/name.c
 )
 set(name_OBJS
     obj/clock.o

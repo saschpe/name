@@ -1,8 +1,8 @@
 #ifndef NAME_H
 #define NAME_H
 
-#define NAME_PORT 57539
-#define POLL_TIMEOUT 10000
+#include <arpa/inet.h>
+
 #define ELECTION_TIMEOUT 300
 #define MASTER_TIMEOUT 600
 
@@ -30,5 +30,10 @@ typedef struct client_info
     char name[12];
     int last_hello;
 } client_info_t;
+
+void send_HELLO(int sock, struct sockaddr_in sa, unsigned short my_id);
+void send_ELECTION(int sock, struct sockaddr_in sa, unsigned short my_id);
+void send_GET_NAME(int sender_id, int sock, struct sockaddr_in sa, struct sockaddr_in csa, unsigned short my_id);
+void send_NAME_ID(int sock, struct sockaddr_in sa, struct sockaddr_in csa, unsigned short my_id, const char *my_name);
 
 #endif
