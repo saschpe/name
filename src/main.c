@@ -19,7 +19,7 @@
 static unsigned short g_id;
 static const char *g_name = "Sascha";
 
-void print_usage(const char *prog_name)
+static void print_usage(const char *prog_name)
 {
     printf("Usage: %s [ID, NAME]\n"
            "    ID   : integer between 0 and 65535\n"
@@ -87,7 +87,7 @@ int main(int argc, char *argv[])
                                 if (g_hash_table_lookup(clients, &sender_id) == NULL) {
                                     ns_hash_table_insert(clients, sender_id, "");
                                 }
-                                ns_send_GET_NAME(sender_id, sock, sa, csa, g_id);
+                                ns_send_GET_NAME(sock, sa, g_id, csa, sender_id);
                             }
                             break;
                         }
@@ -97,9 +97,9 @@ int main(int argc, char *argv[])
                                 printf("  Message was for me, ns_send NAME_ID message to '%d'.\n", sender_id);
                                 if (g_hash_table_lookup(clients, &sender_id) == NULL) {
                                     ns_hash_table_insert(clients, sender_id, "");
-                                    ns_send_GET_NAME(sender_id, sock, sa, csa, g_id);
+                                    ns_send_GET_NAME(sock, sa, g_id, csa, sender_id);
                                 }
-                                ns_send_NAME_ID(sock, sa, csa, g_id, g_name);
+                                ns_send_NAME_ID(sock, sa, g_id, g_name, csa);
                             }
                             break;
                         }
@@ -110,9 +110,9 @@ int main(int argc, char *argv[])
                                 printf("  Message was for me, ns_send NAME_ID message to '%d'.\n", sender_id);
                                 if (g_hash_table_lookup(clients, &sender_id) == NULL) {
                                     ns_hash_table_insert(clients, sender_id, "");
-                                    ns_send_GET_NAME(sender_id, sock, sa, csa, g_id);
+                                    ns_send_GET_NAME(sock, sa, g_id, csa, sender_id);
                                 }
-                                ns_send_NAME_ID(sock, sa, csa, g_id, g_name);
+                                ns_send_NAME_ID(sock, sa, g_id, g_name, csa);
                             }
                             break;
                         }

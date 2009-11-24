@@ -37,11 +37,15 @@ typedef struct ns_client
     int last_hello;
 } ns_client_t;
 
-void ns_init(int sock, struct sockaddr_in sa, int port);
+void ns_init(int *sock, struct sockaddr_in *sa, int port);
 
 void ns_send_HELLO(int sock, struct sockaddr_in sa, unsigned short id);
+//void ns_send_GET_ID
+void ns_send_GET_NAME(int sock, struct sockaddr_in sa, unsigned short id, struct sockaddr_in csa, int cid);
+void ns_send_NAME_ID(int sock, struct sockaddr_in sa, unsigned short id, const char *name, struct sockaddr_in csa);
+
+void ns_send_START_ELECTION(int sock, struct sockaddr_in sa, unsigned short id);
 void ns_send_ELECTION(int sock, struct sockaddr_in sa, unsigned short id);
-void ns_send_GET_NAME(int sender_id, int sock, struct sockaddr_in sa, struct sockaddr_in csa, unsigned short id);
-void ns_send_NAME_ID(int sock, struct sockaddr_in sa, struct sockaddr_in csa, unsigned short id, const char *name);
+void ns_send_MASTER(int sock, struct sockaddr_in sa, unsigned short id);
 
 #endif
