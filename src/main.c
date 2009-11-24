@@ -142,7 +142,10 @@ int main(int argc, char *argv[])
 
     g_my_id = getpid();
     g_client_hash_table = g_hash_table_new(g_int_hash, g_int_equal);
-    clock_init();
+
+    //TODO: Change later:
+    //clock_init();
+    clock_setup(0, 100);
 
     parse_cmdline_args(argc, argv);
 
@@ -174,7 +177,7 @@ int main(int argc, char *argv[])
 
     /* printf("listening for datagrams...\n"); */
     while (1) {
-        int wait_time = poll_time(get_time() / 1000 + POLL_TIMEOUT);
+        int wait_time = poll_time(get_time() + POLL_TIMEOUT * 1000);
         int ret = poll(pfd, 1, wait_time);
 
         if (ret == 0) {
