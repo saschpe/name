@@ -20,7 +20,9 @@ typedef enum packet_type {
     HELLO = 1,
     GET_ID,
     GET_NAME,
-    NAME_ID
+    NAME_ID,
+    START_ELECTION,
+    MASTER
 } packet_type_t;
 
 typedef struct packet {
@@ -38,7 +40,7 @@ typedef struct client_info
     int last_seen;
 } client_info_t;
 
-static GHashTable *g_id_name_hash_table;
+static GHashTable *g_client_hash_table;
 static unsigned short g_my_id;
 static const char *g_my_name = "Sascha";
 
@@ -76,8 +78,8 @@ void send_GET_NAME(int sender_id, int sock, struct sockaddr_in sa, struct sockad
 {
     struct packet tmp;
 
-    const char *name = g_hash_table_lookup(g_id_name_hash_table, &sender_id);
-    if (name != NULL && strlen(name) == 0) {
+    client_info_t *info = g_hash_table_lookup(g_client_hash_table, &sender_id);
+    if (info != NULL && strlen(info->name) == 0) {
         printf("  No name stored, send a GET_NAME message to '%d'.\n", sender_id);
         /* send GET_NAME message */
         struct packet tmp;
@@ -128,13 +130,18 @@ void parse_cmdline_args(int argc, char *argv[])
     }
 }
 
+void check_or_insert_new_client(int id, const char *payload)
+{
+    //TODO
+}
+
 int main(int argc, char *argv[])
 {
     int sock;
     struct sockaddr_in sa;
 
     g_my_id = getpid();
-    g_id_name_hash_table = g_hash_table_new(g_int_hash, g_int_equal);
+    g_client_hash_table = g_hash_table_new(g_int_hash, g_int_equal);
     clock_init();
 
     parse_cmdline_args(argc, argv);
@@ -185,16 +192,20 @@ int main(int argc, char *argv[])
                 } else {
                     unsigned short sender_id = ntohs(pack.sender_id);
                     switch (ntohs(pack.type)) {
-                        case HELLO:
+                        case HELLO: {
                             printf("HELLO message received from '%d'.\n", sender_id);
-                            g_hash_table_insert(g_id_name_hash_table, &sender_id, "");
+                            client_info_t info;
+                            strncpy(info.name, "", strlen(""));
+                            info.last_seen = get_time();
+                            g_hash_table_insert(g_client_hash_table, &sender_id, &info);
                             if (sender_id != g_my_id) {
                                 send_GET_NAME(sender_id, sock, sa, csa);
                             } else {
                                 printf("  Discarded message sent by myself.\n");
                             }
                             break;
-                        case GET_ID:
+                        }
+                        case GET_ID: {
                             printf("GET_ID message received from '%d' for '%s'.\n", sender_id, pack.payload.name);
                             if (sender_id != g_my_id && strncmp(pack.payload.name, g_my_name, strlen(g_my_name))) {
                                 printf("  Message was for me, send NAME_ID message to '%d'.\n", sender_id);
@@ -203,30 +214,40 @@ int main(int argc, char *argv[])
                                 printf("  Discarded message either sent by me or not destinated to me.\n");
                             }
                             break;
-                        case GET_NAME:
-                            {   // Stupid C89, needs a block inside 'case' to allow variable declarations
-                                unsigned short payload_id = ntohs(pack.payload.id);
-                                printf("GET_NAME message received from '%d' for '%hd'.\n", sender_id, payload_id);
-                                if (sender_id != g_my_id && payload_id == g_my_id) {
-                                    send_GET_NAME(sender_id, sock, sa, csa);
-                                    printf("  Message was for me, send NAME_ID message to '%d'.\n", sender_id);
-                                    send_NAME_ID(sock, sa, csa);
-                                } else {
-                                    printf("  Discarded message either sent by me or not destinated to me.\n");
-                                }
-                            } break;
-                        case NAME_ID:
+                        }
+                        case GET_NAME: {   // Stupid C89, needs a block inside 'case' to allow variable declarations
+                            unsigned short payload_id = ntohs(pack.payload.id);
+                            printf("GET_NAME message received from '%d' for '%hd'.\n", sender_id, payload_id);
+                            if (sender_id != g_my_id && payload_id == g_my_id) {
+                                send_GET_NAME(sender_id, sock, sa, csa);
+                                printf("  Message was for me, send NAME_ID message to '%d'.\n", sender_id);
+                                send_NAME_ID(sock, sa, csa);
+                            } else {
+                                printf("  Discarded message either sent by me or not destinated to me.\n");
+                            }
+                            break;
+                        }
+                        case NAME_ID: {
                             pack.payload.name[12] = '\0';
                             printf("NAME_ID message received from '%d' with name '%s'.\n", sender_id, pack.payload.name);
-                            g_hash_table_insert(g_id_name_hash_table, &sender_id, pack.payload.name);
-                            printf("  Stored name '%s' for '%d' in local database.\n", g_hash_table_lookup(g_id_name_hash_table, &sender_id), sender_id);
+                            client_info_t *info = g_hash_table_lookup(g_client_hash_table, &sender_id);
+                            if (info != NULL) {
+                                strncpy(info->name, pack.payload.name, strlen(pack.payload.name));
+                                g_hash_table_insert(g_client_hash_table, &sender_id, info);
+                            } else {
+                                info = (client_info_t *)malloc(sizeof(client_info_t));
+                                strncpy(info->name, pack.payload.name, strlen(pack.payload.name));
+                                info->last_seen = get_time();
+                            }
+                            printf("  Stored name '%s' for '%d' in local database.\n", info->name, sender_id);
                             break;
+                        }
                     }
                 }
             }
         }
 
     }
-    g_hash_table_destroy(g_id_name_hash_table);
+    g_hash_table_destroy(g_client_hash_table);
     return 0;
 }
