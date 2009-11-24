@@ -94,7 +94,7 @@ int main(int argc, char *argv[])
                         case GET_ID: {
                             printf("GET_ID message received from '%d' for '%s'.\n", sender_id, pack.payload.name);
                             if (sender_id != g_id && strncmp(pack.payload.name, g_name, strlen(g_name))) {
-                                printf("  Message was for me, ns_send NAME_ID message to '%d'.\n", sender_id);
+                                printf("  Message was for me, send NAME_ID message to '%d'.\n", sender_id);
                                 if (g_hash_table_lookup(peers, &sender_id) == NULL) {
                                     ns_hash_table_insert(peers, sender_id, "");
                                     ns_send_GET_NAME(sock, sa, g_id, csa, sender_id);
@@ -107,7 +107,7 @@ int main(int argc, char *argv[])
                             unsigned short payload_id = ntohs(pack.payload.id);
                             printf("GET_NAME message received from '%d' for '%hd'.\n", sender_id, payload_id);
                             if (sender_id != g_id && payload_id == g_id) {
-                                printf("  Message was for me, ns_send NAME_ID message to '%d'.\n", sender_id);
+                                printf("  Message was for me, send NAME_ID message to '%d'.\n", sender_id);
                                 if (g_hash_table_lookup(peers, &sender_id) == NULL) {
                                     ns_hash_table_insert(peers, sender_id, "");
                                     ns_send_GET_NAME(sock, sa, g_id, csa, sender_id);
@@ -134,6 +134,7 @@ int main(int argc, char *argv[])
                             if (sender_id > g_id) {
                                 ns_send_ELECTION(sock, sa, g_id);
                             }
+                            //TODO:
                             break;
                         }
                         case ELECTION: {
