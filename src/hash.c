@@ -21,6 +21,7 @@ void ns_hash_table_insert(GHashTable *table, int id, const char *name)
         info->last_hello = get_time();
         g_hash_table_insert(table, key, info);
         printf("Inserted key '%d' with name value '%s' in ns_hash table.\n", *key, info->name);
+        ns_hash_table_print(table);
     } else {
         fprintf(stderr, "Error: Unable to allocate memory for client info!\n");
     }
@@ -35,3 +36,14 @@ void ns_hash_table_free(gpointer key, gpointer value, gpointer user_data)
     g_free(value);
 }
 
+static void print_key_value(gpointer key, gpointer value, gpointer user_data)
+{
+    printf("%d:%s, ", *(int *)key, value);
+}
+
+void ns_hash_table_print(GHashTable *table)
+{
+    printf("[");
+    g_hash_table_foreach(table, print_key_value, NULL);
+    printf("]\n");
+}
