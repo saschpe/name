@@ -22,6 +22,7 @@ typedef enum packet_type {
     GET_NAME,
     NAME_ID,
     START_ELECTION,
+    ELECTION,
     MASTER
 } packet_type_t;
 
@@ -37,7 +38,7 @@ typedef struct packet {
 typedef struct client_info
 {
     char name[12];
-    int last_seen;
+    int last_hello;
 } client_info_t;
 
 static GHashTable *g_client_hash_table;
@@ -80,20 +81,20 @@ void send_GET_NAME(int sender_id, int sock, struct sockaddr_in sa, struct sockad
 
     client_info_t *info = g_hash_table_lookup(g_client_hash_table, &sender_id);
     if (info != NULL) {
-        if (strlen(info->name) == 0) {
+        if (info->name != NULL && strlen(info->name) == 0) {
             printf("  No name stored, send a GET_NAME message to '%d'.\n", sender_id);
             /* send GET_NAME message */
             struct packet tmp;
             memset(&tmp, 0, sizeof(tmp));
             tmp.sender_id = htons(g_my_id);
             tmp.type = htons(GET_NAME);
-            tmp.payload.id = sender_id;
+            tmp.payload.id = htons(sender_id);
             sa.sin_addr.s_addr = csa.sin_addr.s_addr;
             if (sendto(sock, (void *)&tmp, sizeof(tmp), 0, (struct sockaddr *)&sa, sizeof(sa)) < 0) {
                 perror("sendto");
             }
         } else {
-            printf("  Already have an name for '%d': '%s'\n", sender_id, info->name);
+            printf("  Already have a name for '%d': '%s'\n", sender_id, info->name);
         }
     } else {
         fprintf(stderr, "Error: The id '%d' is not stored!\n", sender_id);
@@ -114,7 +115,7 @@ void send_NAME_ID(int sock, struct sockaddr_in sa, struct sockaddr_in csa)
     }
 }
 
-void parse_cmdline_args(int argc, char *argv[])
+static void parse_cmdline_args(int argc, char *argv[])
 {
     if (argc == 3) {
         int tmp = atoi(argv[1]); //TODO: strtol catches more errors
@@ -136,9 +137,26 @@ void parse_cmdline_args(int argc, char *argv[])
     }
 }
 
-void check_or_insert_new_client(int id, const char *payload)
+static void free_a_hash_table_entry(gpointer key, gpointer value, gpointer user_data)
 {
-    //TODO
+    g_free(key);
+    g_free(value);
+}
+
+static void hash_table_insert(GHashTable *table, int id, const char *name)
+{
+    client_info_t *info = (client_info_t *)malloc(sizeof(client_info_t));
+
+    if (info != NULL) {
+        // This stupid bullshit is necessary because glib hash tables don't make
+        // copies of provided keys and values, instead store pointers.
+        int *key = (int *)malloc(sizeof(int));
+        *key = id;
+        strncpy(info->name, name, strlen(name));
+        g_hash_table_insert(g_client_hash_table, key, info);
+    } else {
+        fprintf(stderr, "Error: Unable to allocate memory for client info!\n");
+    }
 }
 
 int main(int argc, char *argv[])
@@ -148,11 +166,7 @@ int main(int argc, char *argv[])
 
     g_my_id = getpid();
     g_client_hash_table = g_hash_table_new(g_int_hash, g_int_equal);
-
-    //TODO: Change later:
-    //clock_init();
-    clock_setup(0, 100);
-
+    clock_init();
     parse_cmdline_args(argc, argv);
 
     if ((sock = socket(AF_INET, SOCK_DGRAM, 0)) < 0) {
@@ -204,14 +218,11 @@ int main(int argc, char *argv[])
                         case HELLO: {
                             printf("HELLO message received from '%d'.\n", sender_id);
                             if (sender_id != g_my_id) {
-                                client_info_t *info = (client_info_t *)malloc(sizeof(client_info_t));
-                                if (info != NULL) {
-                                    strncpy(info->name, "", strlen(""));
-                                    info->last_seen = get_time();
-                                    g_hash_table_insert(g_client_hash_table, &sender_id, info);
-                                } else {
-                                    fprintf(stderr, "Error: Unable to allocate memory for client info!\n");
+                                client_info_t *info = g_hash_table_lookup(g_client_hash_table, &sender_id);
+                                if (info == NULL) {
+                                    hash_table_insert(g_client_hash_table, sender_id, "");
                                 }
+                                info->last_hello = get_time();
                                 send_GET_NAME(sender_id, sock, sa, csa);
                             } else {
                                 printf("  Discarded message sent by myself.\n");
@@ -244,15 +255,21 @@ int main(int argc, char *argv[])
                             pack.payload.name[12] = '\0';
                             printf("NAME_ID message received from '%d' with name '%s'.\n", sender_id, pack.payload.name);
                             client_info_t *info = g_hash_table_lookup(g_client_hash_table, &sender_id);
-                            if (info != NULL) {
-                                strncpy(info->name, pack.payload.name, strlen(pack.payload.name));
-                                g_hash_table_insert(g_client_hash_table, &sender_id, info);
+                            if (info == NULL) {
+                                hash_table_insert(g_client_hash_table, sender_id, pack.payload.name);
                             } else {
-                                info = (client_info_t *)malloc(sizeof(client_info_t));
                                 strncpy(info->name, pack.payload.name, strlen(pack.payload.name));
-                                info->last_seen = get_time();
                             }
                             printf("  Stored name '%s' for '%d' in local database.\n", info->name, sender_id);
+                            break;
+                        }
+                        case START_ELECTION: {
+                            break;
+                        }
+                        case ELECTION: {
+                            break;
+                        }
+                        case MASTER: {
                             break;
                         }
                     }
@@ -261,7 +278,7 @@ int main(int argc, char *argv[])
         }
 
     }
-    // TODO: Correctly free memory referenced from all the table items
+    g_hash_table_foreach(g_client_hash_table, free_a_hash_table_entry, NULL);
     g_hash_table_destroy(g_client_hash_table);
     return 0;
 }
