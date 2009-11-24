@@ -95,24 +95,24 @@ int main(int argc, char *argv[])
                             printf("GET_ID message received from '%d' for '%s'.\n", sender_id, pack.payload.name);
                             if (sender_id != g_id && strncmp(pack.payload.name, g_name, strlen(g_name))) {
                                 printf("  Message was for me, ns_send NAME_ID message to '%d'.\n", sender_id);
-                                ns_send_NAME_ID(sock, sa, csa, g_id, g_name);
                                 if (g_hash_table_lookup(clients, &sender_id) == NULL) {
                                     ns_hash_table_insert(clients, sender_id, "");
                                     ns_send_GET_NAME(sender_id, sock, sa, csa, g_id);
                                 }
+                                ns_send_NAME_ID(sock, sa, csa, g_id, g_name);
                             }
                             break;
                         }
-                        case GET_NAME: {   // Stupid C89, needs a block inside 'case' to allow variable declarations
+                        case GET_NAME: {
                             unsigned short payload_id = ntohs(pack.payload.id);
                             printf("GET_NAME message received from '%d' for '%hd'.\n", sender_id, payload_id);
                             if (sender_id != g_id && payload_id == g_id) {
                                 printf("  Message was for me, ns_send NAME_ID message to '%d'.\n", sender_id);
-                                ns_send_NAME_ID(sock, sa, csa, g_id, g_name);
                                 if (g_hash_table_lookup(clients, &sender_id) == NULL) {
                                     ns_hash_table_insert(clients, sender_id, "");
                                     ns_send_GET_NAME(sender_id, sock, sa, csa, g_id);
                                 }
+                                ns_send_NAME_ID(sock, sa, csa, g_id, g_name);
                             }
                             break;
                         }
@@ -137,10 +137,12 @@ int main(int argc, char *argv[])
                             break;
                         }
                         case ELECTION: {
+                            printf("ELECTION message received from '%d'.\n", sender_id);
                             //TODO:
                             break;
                         }
                         case MASTER: {
+                            printf("MASTER message received from '%d'.\n", sender_id);
                             //TODO:
                             break;
                         }
