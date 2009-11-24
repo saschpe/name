@@ -5,6 +5,9 @@
 #include <stdlib.h>
 #include <string.h>
 
+/**
+ *
+ */
 void hash_table_insert(GHashTable *table, int id, const char *name)
 {
     client_info_t *info = (client_info_t *)malloc(sizeof(client_info_t));
@@ -23,6 +26,9 @@ void hash_table_insert(GHashTable *table, int id, const char *name)
     }
 }
 
+/**
+ *
+ */
 void hash_table_free(gpointer key, gpointer value, gpointer user_data)
 {
     g_free(key);

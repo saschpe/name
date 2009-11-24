@@ -4,6 +4,9 @@
 #include <stdlib.h>
 #include <string.h>
 
+/**
+ *
+ */
 void send_HELLO(int sock, struct sockaddr_in sa, unsigned short my_id)
 {
     struct packet pack;
@@ -18,6 +21,9 @@ void send_HELLO(int sock, struct sockaddr_in sa, unsigned short my_id)
     }
 }
 
+/**
+ *
+ */
 void send_ELECTION(int sock, struct sockaddr_in sa, unsigned short my_id)
 {
     struct packet pack;
@@ -41,7 +47,6 @@ void send_GET_NAME(int sender_id, int sock, struct sockaddr_in sa, struct sockad
 {
     struct packet pack;
 
-    /* send GET_NAME message */
     memset(&pack, 0, sizeof(pack));
     pack.sender_id = htons(my_id);
     pack.type = htons(GET_NAME);
@@ -52,6 +57,9 @@ void send_GET_NAME(int sender_id, int sock, struct sockaddr_in sa, struct sockad
     }
 }
 
+/**
+ *
+ */
 void send_NAME_ID(int sock, struct sockaddr_in sa, struct sockaddr_in csa, unsigned short my_id, const char *my_name)
 {
     struct packet pack;

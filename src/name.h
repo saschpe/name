@@ -6,6 +6,9 @@
 #define ELECTION_TIMEOUT 300
 #define MASTER_TIMEOUT 600
 
+/**
+ *
+ */
 typedef enum packet_type {
     HELLO = 1,
     GET_ID,
@@ -16,6 +19,9 @@ typedef enum packet_type {
     MASTER
 } packet_type_t;
 
+/**
+ *
+ */
 typedef struct packet {
     unsigned short sender_id;
     unsigned short type;
@@ -25,6 +31,9 @@ typedef struct packet {
     } payload;
 } __attribute((packed)) packet_t;
 
+/**
+ *
+ */
 typedef struct client_info
 {
     char name[12];
