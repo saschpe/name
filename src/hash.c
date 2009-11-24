@@ -10,7 +10,7 @@
  */
 void ns_hash_table_insert(GHashTable *table, int id, const char *name)
 {
-    ns_client_t *info = (ns_client_t *)malloc(sizeof(ns_client_t));
+    ns_peer_t *info = (ns_peer_t *)malloc(sizeof(ns_peer_t));
 
     if (info != NULL) {
         // This stupid bullshit is necessary because glib ns_hash tables don't make

@@ -48,7 +48,7 @@ void ns_send_HELLO(int sock, struct sockaddr_in sa, unsigned short id)
 /**
  * Send a GET_NAME package.
  *
- * sender_id has to be in network byte order
+ * cid has to be in network byte order
  */
 void ns_send_GET_NAME(int sock, struct sockaddr_in sa, unsigned short id, struct sockaddr_in csa, int cid)
 {
@@ -57,6 +57,25 @@ void ns_send_GET_NAME(int sock, struct sockaddr_in sa, unsigned short id, struct
     memset(&pack, 0, sizeof(pack));
     pack.sender_id = htons(id);
     pack.type = htons(GET_NAME);
+    pack.payload.id = htons(cid);
+    sa.sin_addr.s_addr = csa.sin_addr.s_addr;
+    if (sendto(sock, (void *)&pack, sizeof(pack), 0, (struct sockaddr *)&sa, sizeof(sa)) < 0) {
+        perror("sendto");
+    }
+}
+
+/**
+ * Send a GET_ID package.
+ *
+ * cid has to be in network byte order
+ */
+void ns_send_GET_ID(int sock, struct sockaddr_in sa, unsigned short id, struct sockaddr_in csa, int cid)
+{
+    struct ns_packet pack;
+
+    memset(&pack, 0, sizeof(pack));
+    pack.sender_id = htons(id);
+    pack.type = htons(GET_ID);
     pack.payload.id = htons(cid);
     sa.sin_addr.s_addr = csa.sin_addr.s_addr;
     if (sendto(sock, (void *)&pack, sizeof(pack), 0, (struct sockaddr *)&sa, sizeof(sa)) < 0) {

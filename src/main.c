@@ -55,7 +55,7 @@ int main(int argc, char *argv[])
 
     g_id = getpid();
     parse_cmdline_args(argc, argv);
-    GHashTable *clients = g_hash_table_new(g_int_hash, g_int_equal);
+    GHashTable *peers = g_hash_table_new(g_int_hash, g_int_equal);
     clock_init();
 
     ns_init(&sock, &sa, PORT);
@@ -84,8 +84,8 @@ int main(int argc, char *argv[])
                         case HELLO: {
                             printf("HELLO message received from '%d'.\n", sender_id);
                             if (sender_id != g_id) {
-                                if (g_hash_table_lookup(clients, &sender_id) == NULL) {
-                                    ns_hash_table_insert(clients, sender_id, "");
+                                if (g_hash_table_lookup(peers, &sender_id) == NULL) {
+                                    ns_hash_table_insert(peers, sender_id, "");
                                 }
                                 ns_send_GET_NAME(sock, sa, g_id, csa, sender_id);
                             }
@@ -95,8 +95,8 @@ int main(int argc, char *argv[])
                             printf("GET_ID message received from '%d' for '%s'.\n", sender_id, pack.payload.name);
                             if (sender_id != g_id && strncmp(pack.payload.name, g_name, strlen(g_name))) {
                                 printf("  Message was for me, ns_send NAME_ID message to '%d'.\n", sender_id);
-                                if (g_hash_table_lookup(clients, &sender_id) == NULL) {
-                                    ns_hash_table_insert(clients, sender_id, "");
+                                if (g_hash_table_lookup(peers, &sender_id) == NULL) {
+                                    ns_hash_table_insert(peers, sender_id, "");
                                     ns_send_GET_NAME(sock, sa, g_id, csa, sender_id);
                                 }
                                 ns_send_NAME_ID(sock, sa, g_id, g_name, csa);
@@ -108,8 +108,8 @@ int main(int argc, char *argv[])
                             printf("GET_NAME message received from '%d' for '%hd'.\n", sender_id, payload_id);
                             if (sender_id != g_id && payload_id == g_id) {
                                 printf("  Message was for me, ns_send NAME_ID message to '%d'.\n", sender_id);
-                                if (g_hash_table_lookup(clients, &sender_id) == NULL) {
-                                    ns_hash_table_insert(clients, sender_id, "");
+                                if (g_hash_table_lookup(peers, &sender_id) == NULL) {
+                                    ns_hash_table_insert(peers, sender_id, "");
                                     ns_send_GET_NAME(sock, sa, g_id, csa, sender_id);
                                 }
                                 ns_send_NAME_ID(sock, sa, g_id, g_name, csa);
@@ -120,9 +120,9 @@ int main(int argc, char *argv[])
                             pack.payload.name[12] = '\0';
                             printf("NAME_ID message received from '%d' with name '%s'.\n", sender_id, pack.payload.name);
                             if (sender_id != g_id) {
-                                ns_client_t *info = g_hash_table_lookup(clients, &sender_id);
+                                ns_peer_t *info = g_hash_table_lookup(peers, &sender_id);
                                 if (info == NULL) {
-                                    ns_hash_table_insert(clients, sender_id, pack.payload.name);
+                                    ns_hash_table_insert(peers, sender_id, pack.payload.name);
                                 } else {
                                     strncpy(info->name, pack.payload.name, strlen(pack.payload.name));
                                 }
@@ -151,7 +151,7 @@ int main(int argc, char *argv[])
             }
         }
     }
-    g_hash_table_foreach(clients, ns_hash_table_free, NULL);
-    g_hash_table_destroy(clients);
+    g_hash_table_foreach(peers, ns_hash_table_free, NULL);
+    g_hash_table_destroy(peers);
     return 0;
 }

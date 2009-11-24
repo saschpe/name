@@ -4,7 +4,7 @@
 #include <arpa/inet.h>
 
 /**
- *
+ * Defines the possible packet types
  */
 typedef enum ns_packet_type {
     HELLO = 1,
@@ -17,7 +17,7 @@ typedef enum ns_packet_type {
 } ns_packet_type_t;
 
 /**
- *
+ * Describes the packet structure.
  */
 typedef struct ns_packet {
     unsigned short sender_id;
@@ -29,18 +29,18 @@ typedef struct ns_packet {
 } __attribute((packed)) ns_packet_t;
 
 /**
- *
+ * Holds the information about other clients
  */
-typedef struct ns_client
+typedef struct ns_peer
 {
     char name[12];
     int last_hello;
-} ns_client_t;
+} ns_peer_t;
 
 void ns_init(int *sock, struct sockaddr_in *sa, int port);
 
 void ns_send_HELLO(int sock, struct sockaddr_in sa, unsigned short id);
-//void ns_send_GET_ID
+void ns_send_GET_ID(int sock, struct sockaddr_in sa, unsigned short id, struct sockaddr_in csa, int cid);
 void ns_send_GET_NAME(int sock, struct sockaddr_in sa, unsigned short id, struct sockaddr_in csa, int cid);
 void ns_send_NAME_ID(int sock, struct sockaddr_in sa, unsigned short id, const char *name, struct sockaddr_in csa);
 
