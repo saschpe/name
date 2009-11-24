@@ -79,18 +79,24 @@ void send_GET_NAME(int sender_id, int sock, struct sockaddr_in sa, struct sockad
     struct packet tmp;
 
     client_info_t *info = g_hash_table_lookup(g_client_hash_table, &sender_id);
-    if (info != NULL && strlen(info->name) == 0) {
-        printf("  No name stored, send a GET_NAME message to '%d'.\n", sender_id);
-        /* send GET_NAME message */
-        struct packet tmp;
-        memset(&tmp, 0, sizeof(tmp));
-        tmp.sender_id = htons(g_my_id);
-        tmp.type = htons(GET_NAME);
-        tmp.payload.id = sender_id;
-        sa.sin_addr.s_addr = csa.sin_addr.s_addr;
-        if (sendto(sock, (void *)&tmp, sizeof(tmp), 0, (struct sockaddr *)&sa, sizeof(sa)) < 0) {
-            perror("sendto");
+    if (info != NULL) {
+        if (strlen(info->name) == 0) {
+            printf("  No name stored, send a GET_NAME message to '%d'.\n", sender_id);
+            /* send GET_NAME message */
+            struct packet tmp;
+            memset(&tmp, 0, sizeof(tmp));
+            tmp.sender_id = htons(g_my_id);
+            tmp.type = htons(GET_NAME);
+            tmp.payload.id = sender_id;
+            sa.sin_addr.s_addr = csa.sin_addr.s_addr;
+            if (sendto(sock, (void *)&tmp, sizeof(tmp), 0, (struct sockaddr *)&sa, sizeof(sa)) < 0) {
+                perror("sendto");
+            }
+        } else {
+            printf("  Already have an name for '%d': '%s'\n", sender_id, info->name);
         }
+    } else {
+        fprintf(stderr, "Error: The id '%d' is not stored!\n", sender_id);
     }
 }
 
@@ -191,17 +197,21 @@ int main(int argc, char *argv[])
                 struct packet pack;
 
                 if ((bytes_read  = recvfrom(sock, &pack, sizeof(pack), 0, (struct sockaddr *)&csa, &csalen)) < 0) {
-                    fprintf(stderr, "Error while reading datagram!\n");
+                    fprintf(stderr, "Error: Unable to read datagram!\n");
                 } else {
                     unsigned short sender_id = ntohs(pack.sender_id);
                     switch (ntohs(pack.type)) {
                         case HELLO: {
                             printf("HELLO message received from '%d'.\n", sender_id);
-                            client_info_t info;
-                            strncpy(info.name, "", strlen(""));
-                            info.last_seen = get_time();
-                            g_hash_table_insert(g_client_hash_table, &sender_id, &info);
                             if (sender_id != g_my_id) {
+                                client_info_t *info = (client_info_t *)malloc(sizeof(client_info_t));
+                                if (info != NULL) {
+                                    strncpy(info->name, "", strlen(""));
+                                    info->last_seen = get_time();
+                                    g_hash_table_insert(g_client_hash_table, &sender_id, info);
+                                } else {
+                                    fprintf(stderr, "Error: Unable to allocate memory for client info!\n");
+                                }
                                 send_GET_NAME(sender_id, sock, sa, csa);
                             } else {
                                 printf("  Discarded message sent by myself.\n");
@@ -251,6 +261,7 @@ int main(int argc, char *argv[])
         }
 
     }
+    // TODO: Correctly free memory referenced from all the table items
     g_hash_table_destroy(g_client_hash_table);
     return 0;
 }
