@@ -1,6 +1,6 @@
 #include "clock.h"
-
-#include <glib.h>
+#include "hash.h"
+#include "name.h"
 
 #include <arpa/inet.h>
 #include <limits.h>
@@ -11,35 +11,6 @@
 #include <string.h>
 #include <sys/types.h>
 #include <sys/socket.h>
-
-#define NAME_PORT 57539
-#define POLL_TIMEOUT 10000
-#define MAX_CLIENTS 16
-
-typedef enum packet_type {
-    HELLO = 1,
-    GET_ID,
-    GET_NAME,
-    NAME_ID,
-    START_ELECTION,
-    ELECTION,
-    MASTER
-} packet_type_t;
-
-typedef struct packet {
-    unsigned short sender_id;
-    unsigned short type;
-    union {
-        unsigned short id;
-        char name[12];
-    } payload;
-} __attribute((packed)) packet_t;
-
-typedef struct client_info
-{
-    char name[12];
-    int last_hello;
-} client_info_t;
 
 static GHashTable *g_client_hash_table;
 static unsigned short g_my_id;
@@ -64,6 +35,20 @@ void send_HELLO(int sock, struct sockaddr_in sa)
     memset(&pack, 0, sizeof(pack));
     pack.sender_id = htons(g_my_id);
     pack.type = htons(HELLO);
+    /* inet_addr("127.0.0.1"); */
+    if (sendto(sock, (void *)&pack, sizeof(pack), 0, (struct sockaddr *)&sa, sizeof(sa)) < 0) {
+        perror("sendto"); exit(6);
+    }
+}
+
+void send_ELECTION(int sock, struct sockaddr_in sa)
+{
+    struct packet pack;
+
+    sa.sin_addr.s_addr = htonl(INADDR_BROADCAST);
+    memset(&pack, 0, sizeof(pack));
+    pack.sender_id = htons(g_my_id);
+    pack.type = htons(ELECTION);
     /* inet_addr("127.0.0.1"); */
     if (sendto(sock, (void *)&pack, sizeof(pack), 0, (struct sockaddr *)&sa, sizeof(sa)) < 0) {
         perror("sendto"); exit(6);
@@ -137,28 +122,6 @@ static void parse_cmdline_args(int argc, char *argv[])
     }
 }
 
-static void free_a_hash_table_entry(gpointer key, gpointer value, gpointer user_data)
-{
-    g_free(key);
-    g_free(value);
-}
-
-static void hash_table_insert(GHashTable *table, int id, const char *name)
-{
-    client_info_t *info = (client_info_t *)malloc(sizeof(client_info_t));
-
-    if (info != NULL) {
-        // This stupid bullshit is necessary because glib hash tables don't make
-        // copies of provided keys and values, instead store pointers.
-        int *key = (int *)malloc(sizeof(int));
-        *key = id;
-        strncpy(info->name, name, strlen(name));
-        g_hash_table_insert(g_client_hash_table, key, info);
-    } else {
-        fprintf(stderr, "Error: Unable to allocate memory for client info!\n");
-    }
-}
-
 int main(int argc, char *argv[])
 {
     int sock;
@@ -218,11 +181,9 @@ int main(int argc, char *argv[])
                         case HELLO: {
                             printf("HELLO message received from '%d'.\n", sender_id);
                             if (sender_id != g_my_id) {
-                                client_info_t *info = g_hash_table_lookup(g_client_hash_table, &sender_id);
-                                if (info == NULL) {
+                                if (g_hash_table_lookup(g_client_hash_table, &sender_id) == NULL) {
                                     hash_table_insert(g_client_hash_table, sender_id, "");
                                 }
-                                info->last_hello = get_time();
                                 send_GET_NAME(sender_id, sock, sa, csa);
                             } else {
                                 printf("  Discarded message sent by myself.\n");
@@ -232,6 +193,10 @@ int main(int argc, char *argv[])
                         case GET_ID: {
                             printf("GET_ID message received from '%d' for '%s'.\n", sender_id, pack.payload.name);
                             if (sender_id != g_my_id && strncmp(pack.payload.name, g_my_name, strlen(g_my_name))) {
+                                if (g_hash_table_lookup(g_client_hash_table, &sender_id) == NULL) {
+                                    hash_table_insert(g_client_hash_table, sender_id, "");
+                                    send_GET_NAME(sender_id, sock, sa, csa);
+                                }
                                 printf("  Message was for me, send NAME_ID message to '%d'.\n", sender_id);
                                 send_NAME_ID(sock, sa, csa);
                             } else {
@@ -243,7 +208,10 @@ int main(int argc, char *argv[])
                             unsigned short payload_id = ntohs(pack.payload.id);
                             printf("GET_NAME message received from '%d' for '%hd'.\n", sender_id, payload_id);
                             if (sender_id != g_my_id && payload_id == g_my_id) {
-                                send_GET_NAME(sender_id, sock, sa, csa);
+                                if (g_hash_table_lookup(g_client_hash_table, &sender_id) == NULL) {
+                                    hash_table_insert(g_client_hash_table, sender_id, "");
+                                    send_GET_NAME(sender_id, sock, sa, csa);
+                                }
                                 printf("  Message was for me, send NAME_ID message to '%d'.\n", sender_id);
                                 send_NAME_ID(sock, sa, csa);
                             } else {
@@ -254,16 +222,21 @@ int main(int argc, char *argv[])
                         case NAME_ID: {
                             pack.payload.name[12] = '\0';
                             printf("NAME_ID message received from '%d' with name '%s'.\n", sender_id, pack.payload.name);
-                            client_info_t *info = g_hash_table_lookup(g_client_hash_table, &sender_id);
-                            if (info == NULL) {
-                                hash_table_insert(g_client_hash_table, sender_id, pack.payload.name);
-                            } else {
-                                strncpy(info->name, pack.payload.name, strlen(pack.payload.name));
+                            if (sender_id != g_my_id) {
+                                client_info_t *info = g_hash_table_lookup(g_client_hash_table, &sender_id);
+                                if (info == NULL) {
+                                    hash_table_insert(g_client_hash_table, sender_id, pack.payload.name);
+                                } else {
+                                    strncpy(info->name, pack.payload.name, strlen(pack.payload.name));
+                                }
                             }
-                            printf("  Stored name '%s' for '%d' in local database.\n", info->name, sender_id);
                             break;
                         }
                         case START_ELECTION: {
+                            printf("START_ELECTION message received from '%d'.\n", sender_id);
+                            if (sender_id != g_my_id) {
+                                send_ELECTION(sock, sa);
+                            }
                             break;
                         }
                         case ELECTION: {
@@ -278,7 +251,7 @@ int main(int argc, char *argv[])
         }
 
     }
-    g_hash_table_foreach(g_client_hash_table, free_a_hash_table_entry, NULL);
+    g_hash_table_foreach(g_client_hash_table, hash_table_free, NULL);
     g_hash_table_destroy(g_client_hash_table);
     return 0;
 }
