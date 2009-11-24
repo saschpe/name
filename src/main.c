@@ -58,7 +58,7 @@ int main(int argc, char *argv[])
     GHashTable *clients = g_hash_table_new(g_int_hash, g_int_equal);
     clock_init();
 
-    ns_init(sock, sa, PORT);
+    ns_init(&sock, &sa, PORT);
     ns_send_HELLO(sock, sa, g_id);
 
     struct pollfd pfd[1];
