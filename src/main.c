@@ -12,9 +12,6 @@
 #include <sys/socket.h>
 
 #define PORT 57539
-#define ELECTION_TIMEOUT 300
-#define MASTER_TIMEOUT 600
-#define POLL_TIMEOUT 10000
 
 static unsigned short g_id;
 static const char *g_name = "Sascha";
@@ -66,7 +63,7 @@ int main(int argc, char *argv[])
     pfd[0].events = POLLIN;
 
     while (1) {
-        int ret = poll(pfd, 1, poll_time(get_time() + POLL_TIMEOUT * 1000));
+        int ret = poll(pfd, 1, poll_time(get_time() + NS_HELLO_TIMEOUT * 1000));
 
         if (ret == 0) {
             printf("Send another HELLO message\n");

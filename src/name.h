@@ -3,6 +3,10 @@
 
 #include <arpa/inet.h>
 
+#define NS_ELECTION_TIMEOUT 300
+#define NS_MASTER_TIMEOUT 600
+#define NS_HELLO_TIMEOUT 10000
+
 /**
  * Defines the possible packet types
  */
