@@ -12,10 +12,12 @@
 #include <sys/socket.h>
 
 #define PORT 57539
+#define ELECTION_TIMEOUT 300
+#define MASTER_TIMEOUT 600
 #define POLL_TIMEOUT 10000
 
-static unsigned short g_my_id;
-static const char *g_my_name = "Sascha";
+static unsigned short g_id;
+static const char *g_name = "Sascha";
 
 void print_usage(const char *prog_name)
 {
@@ -33,13 +35,13 @@ static void parse_cmdline_args(int argc, char *argv[])
             print_usage(argv[0]);
             exit(1);
         }
-        g_my_id = tmp;
+        g_id = tmp;
         if (strlen(argv[2]) > 11) {
             printf("Invalid NAME provided!\n");
             print_usage(argv[0]);
             exit(1);
         }
-        g_my_name = argv[2];
+        g_name = argv[2];
     } else if (argc != 1) {
         print_usage(argv[0]);
         exit(1);
@@ -51,31 +53,13 @@ int main(int argc, char *argv[])
     int sock;
     struct sockaddr_in sa;
 
-    g_my_id = getpid();
+    g_id = getpid();
     parse_cmdline_args(argc, argv);
     GHashTable *clients = g_hash_table_new(g_int_hash, g_int_equal);
     clock_init();
 
-    memset(&sa, 0, sizeof(sa));
-    sa.sin_family = AF_INET;
-    sa.sin_port = htons(PORT);
-    sa.sin_addr.s_addr = htonl(INADDR_ANY);
-
-    if ((sock = socket(AF_INET, SOCK_DGRAM, 0)) < 0) {
-        perror("socket"); exit(3);
-    }
-    if (bind(sock, (struct sockaddr *)&sa, sizeof(sa))) {
-        perror("bind"); exit(4);
-    }
-
-    /* allow broadcasts on socket */
-    int bc = 1;
-    if (setsockopt(sock, SOL_SOCKET, SO_BROADCAST, &bc, sizeof(bc)) < 0) {
-        perror("setsockopt"); exit(5);
-    }
-
-    /* broadcast HELLO message */
-    send_HELLO(sock, sa, g_my_id);
+    ns_init(sock, sa, PORT);
+    ns_send_HELLO(sock, sa, g_id);
 
     struct pollfd pfd[1];
     pfd[0].fd = sock;
@@ -86,11 +70,11 @@ int main(int argc, char *argv[])
 
         if (ret == 0) {
             printf("Send another HELLO message\n");
-            send_HELLO(sock, sa, g_my_id);
+            ns_send_HELLO(sock, sa, g_id);
         } else if (ret > 0) {
             if (pfd[0].revents & POLLIN) {
                 struct sockaddr_in csa; socklen_t csalen;
-                struct packet pack;
+                ns_packet_t pack;
 
                 if (recvfrom(sock, &pack, sizeof(pack), 0, (struct sockaddr *)&csa, &csalen) < 0) {
                     fprintf(stderr, "Error: Unable to read datagram!\n");
@@ -99,52 +83,46 @@ int main(int argc, char *argv[])
                     switch (ntohs(pack.type)) {
                         case HELLO: {
                             printf("HELLO message received from '%d'.\n", sender_id);
-                            if (sender_id != g_my_id) {
+                            if (sender_id != g_id) {
                                 if (g_hash_table_lookup(clients, &sender_id) == NULL) {
-                                    hash_table_insert(clients, sender_id, "");
+                                    ns_hash_table_insert(clients, sender_id, "");
                                 }
-                                send_GET_NAME(sender_id, sock, sa, csa, g_my_id);
-                            }/* else {
-                                printf("  Discarded message sent by myself.\n");
-                            }*/
+                                ns_send_GET_NAME(sender_id, sock, sa, csa, g_id);
+                            }
                             break;
                         }
                         case GET_ID: {
                             printf("GET_ID message received from '%d' for '%s'.\n", sender_id, pack.payload.name);
-                            if (sender_id != g_my_id && strncmp(pack.payload.name, g_my_name, strlen(g_my_name))) {
-                                printf("  Message was for me, send NAME_ID message to '%d'.\n", sender_id);
-                                send_NAME_ID(sock, sa, csa, g_my_id, g_my_name);
+                            if (sender_id != g_id && strncmp(pack.payload.name, g_name, strlen(g_name))) {
+                                printf("  Message was for me, ns_send NAME_ID message to '%d'.\n", sender_id);
+                                ns_send_NAME_ID(sock, sa, csa, g_id, g_name);
                                 if (g_hash_table_lookup(clients, &sender_id) == NULL) {
-                                    hash_table_insert(clients, sender_id, "");
-                                    send_GET_NAME(sender_id, sock, sa, csa, g_my_id);
+                                    ns_hash_table_insert(clients, sender_id, "");
+                                    ns_send_GET_NAME(sender_id, sock, sa, csa, g_id);
                                 }
-                            }/* else {
-                                printf("  Discarded message either sent by me or not destinated to me.\n");
-                            }*/
+                            }
                             break;
                         }
                         case GET_NAME: {   // Stupid C89, needs a block inside 'case' to allow variable declarations
                             unsigned short payload_id = ntohs(pack.payload.id);
                             printf("GET_NAME message received from '%d' for '%hd'.\n", sender_id, payload_id);
-                            if (sender_id != g_my_id && payload_id == g_my_id) {
-                                printf("  Message was for me, send NAME_ID message to '%d'.\n", sender_id);
-                                send_NAME_ID(sock, sa, csa, g_my_id, g_my_name);
+                            if (sender_id != g_id && payload_id == g_id) {
+                                printf("  Message was for me, ns_send NAME_ID message to '%d'.\n", sender_id);
+                                ns_send_NAME_ID(sock, sa, csa, g_id, g_name);
                                 if (g_hash_table_lookup(clients, &sender_id) == NULL) {
-                                    hash_table_insert(clients, sender_id, "");
-                                    send_GET_NAME(sender_id, sock, sa, csa, g_my_id);
+                                    ns_hash_table_insert(clients, sender_id, "");
+                                    ns_send_GET_NAME(sender_id, sock, sa, csa, g_id);
                                 }
-                            }/* else {
-                                printf("  Discarded message either sent by me or not destinated to me.\n");
-                            }*/
+                            }
                             break;
                         }
                         case NAME_ID: {
                             pack.payload.name[12] = '\0';
                             printf("NAME_ID message received from '%d' with name '%s'.\n", sender_id, pack.payload.name);
-                            if (sender_id != g_my_id) {
-                                client_info_t *info = g_hash_table_lookup(clients, &sender_id);
+                            if (sender_id != g_id) {
+                                ns_client_t *info = g_hash_table_lookup(clients, &sender_id);
                                 if (info == NULL) {
-                                    hash_table_insert(clients, sender_id, pack.payload.name);
+                                    ns_hash_table_insert(clients, sender_id, pack.payload.name);
                                 } else {
                                     strncpy(info->name, pack.payload.name, strlen(pack.payload.name));
                                 }
@@ -153,15 +131,17 @@ int main(int argc, char *argv[])
                         }
                         case START_ELECTION: {
                             printf("START_ELECTION message received from '%d'.\n", sender_id);
-                            if (sender_id > g_my_id) {
-                                send_ELECTION(sock, sa, g_my_id);
+                            if (sender_id > g_id) {
+                                ns_send_ELECTION(sock, sa, g_id);
                             }
                             break;
                         }
                         case ELECTION: {
+                            //TODO:
                             break;
                         }
                         case MASTER: {
+                            //TODO:
                             break;
                         }
                     }
@@ -169,7 +149,7 @@ int main(int argc, char *argv[])
             }
         }
     }
-    g_hash_table_foreach(clients, hash_table_free, NULL);
+    g_hash_table_foreach(clients, ns_hash_table_free, NULL);
     g_hash_table_destroy(clients);
     return 0;
 }
