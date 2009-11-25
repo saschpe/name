@@ -8,8 +8,8 @@
 #include <stdio.h>
 #include <stdlib.h>
 #include <string.h>
-#include <sys/types.h>
 #include <sys/socket.h>
+#include <sys/types.h>
 
 #define PORT 57539
 
@@ -56,19 +56,28 @@ int main(int argc, char *argv[])
     clock_init();
 
     ns_init(&sock, &sa, PORT);
-    printf("-> HELLO\n");
-    ns_send_HELLO(sock, sa, g_id);
 
     struct pollfd pfd[1];
     pfd[0].fd = sock;
     pfd[0].events = POLLIN;
 
+    /* Define the the various wait timeouts for different events */
+    int hello_wait_time = poll_time(get_time() + NS_HELLO_TIMEOUT_MILLISECONDS);
+    int election_wait_time = NS_ELECTION_TIMEOUT_MILLISECONDS;
+    int election_active = 0;
+    int master_wait_time = 0;
+
+    printf("-> HELLO sent.\n");
+    ns_send_HELLO(sock, sa, g_id);
+
     while (1) {
-        int ret = poll(pfd, 1, poll_time(get_time() + NS_HELLO_TIMEOUT * 1000));
+        printf("   Next HELLO wait time: '%lld'\n", hello_wait_time);
+        int ret = poll(pfd, 1, hello_wait_time);
 
         if (ret == 0) {
-            printf("-> HELLO\n");
+            printf("-> HELLO sent.\n");
             ns_send_HELLO(sock, sa, g_id);
+            hello_wait_time = poll_time(get_time() + NS_HELLO_TIMEOUT_MILLISECONDS);
         } else if (ret > 0) {
             if (pfd[0].revents & POLLIN) {
                 struct sockaddr_in csa; socklen_t csalen;
@@ -82,8 +91,12 @@ int main(int argc, char *argv[])
                         case HELLO: {
                             printf("<- HELLO from '%d'.\n", sender_id);
                             if (sender_id != g_id) {
-                                if (g_hash_table_lookup(peers, &sender_id) == NULL) {
+                                ns_peer_t *info = g_hash_table_lookup(peers, &sender_id);
+                                if (info == NULL) {
                                     ns_hash_table_insert(peers, sender_id, "");
+                                } else {
+                                    info->last_hello = get_time();
+                                    printf("   Updated last time seen.\n");
                                 }
                                 printf("-> GET_NAME to '%d'.\n", sender_id);
                                 ns_send_GET_NAME(sock, sa, g_id, csa, sender_id);
@@ -152,6 +165,10 @@ int main(int argc, char *argv[])
                         }
                     }
                 }
+            } // if (pfd[0].revents & POLLIN)
+            time_val diff = get_time() - hello_wait_time;
+            if (diff > 0) {
+                hello_wait_time -= diff;
             }
         }
     }
