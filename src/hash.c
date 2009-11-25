@@ -12,20 +12,16 @@
  */
 void ns_hash_table_insert(GHashTable *table, unsigned short id, const char *name)
 {
+    unsigned short *key = (unsigned short *)malloc(sizeof(unsigned short));
     ns_peer_t *info = (ns_peer_t *)malloc(sizeof(ns_peer_t));
-    memset(info, 0, sizeof(ns_peer_t));
 
-    if (info != NULL) {
-        unsigned short *key = (unsigned short *)malloc(sizeof(unsigned short));
-        *key = id;
-        strncpy(info->name, name, strlen(name));
-        info->last_hello = get_time();
-        g_hash_table_insert(table, key, info);
-        printf("   Inserted key '%d' with name '%s'.\n", *key, info->name);
-        ns_hash_table_print(table);
-    } else {
-        fprintf(stderr, "Error: Unable to allocate memory for client info!\n");
-    }
+    memset(info, 0, sizeof(ns_peer_t));
+    *key = id;
+    strncpy(info->name, name, strlen(name));
+    info->last_hello = get_time();
+    g_hash_table_insert(table, key, info);
+    printf("   Inserted key '%d' with name '%s'.\n", *key, info->name);
+    //ns_hash_table_print(table);
 }
 
 /**

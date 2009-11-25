@@ -70,7 +70,7 @@ int main(int argc, char *argv[])
     printf("-> HELLO sent.\n");
 
     while (1) {
-        printf("   Next HELLO wait time: '%lld'\n", hello_wait_time);
+        //printf("   Next HELLO wait time: '%lld'\n", hello_wait_time);
         int ret = poll(pfd, 1, poll_time(hello_wait_time));
 
         if (ret == 0) {
@@ -78,10 +78,10 @@ int main(int argc, char *argv[])
             ns_send_HELLO(sock, sa, g_id);
             printf("-> HELLO sent.\n");
 
-            printf("   Check for clients which have not sent a HELLO recently...\n");
+            //printf("   Check for clients which have not sent a HELLO recently...\n");
             time_val now_time = get_time();
             g_hash_table_foreach_remove(peers, ns_hash_table_check_last_seen, &now_time);
-            ns_hash_table_print(peers);
+            //ns_hash_table_print(peers);
 
             hello_wait_time = get_time() + NS_HELLO_TIMEOUT;
         } else if (ret > 0) {
@@ -98,29 +98,29 @@ int main(int argc, char *argv[])
                         case HELLO: {
                             printf("<- HELLO from '%d'.\n", sender_id);
                             if (sender_id != g_id) {
-                                ns_peer_t *info = (ns_peer_t *)g_hash_table_lookup(peers, &sender_id);
+                                ns_peer_t *info = g_hash_table_lookup(peers, &sender_id);
                                 if (info == NULL) {
                                     ns_hash_table_insert(peers, sender_id, "");
                                 } else {
                                     info->last_hello = get_time();
-                                    printf("   Updated last HELLO seen time for peer.\n");
+                                    printf("   Updated last HELLO timestamp for peer.\n");
                                 }
                                 printf("-> GET_NAME to '%d'.\n", sender_id);
                                 ns_send_GET_NAME(sock, sa, g_id, psa, sender_id);
                             }
                             break;
                         }
-                        /*case GET_ID: {
+                        case GET_ID: {
                             printf("<- GET_ID from '%d' to name '%s'.\n", sender_id, pack.payload.name);
                             if (sender_id != g_id && strncmp(pack.payload.name, g_name, strlen(g_name))) {
-                                printf("   Message was for me, send NAME_ID message to '%d'.\n", sender_id);
-                                if (g_hash_table_lookup(peers, &sender_id) == NULL) {
+                                //printf("   Message was for me, send NAME_ID message to '%d'.\n", sender_id);
+                                printf("-> NAME_ID to '%d'.\n", sender_id);
+                                ns_send_NAME_ID(sock, sa, g_id, g_name, psa);
+                                /*if (g_hash_table_lookup(peers, &sender_id) == NULL) {
                                     ns_hash_table_insert(peers, sender_id, "");
                                     printf("-> GET_NAME to '%d'.\n", sender_id);
                                     ns_send_GET_NAME(sock, sa, g_id, psa, sender_id);
-                                }
-                                printf("-> NAME_ID to '%d'.\n", sender_id);
-                                ns_send_NAME_ID(sock, sa, g_id, g_name, psa);
+                                }*/
                             }
                             break;
                         }
@@ -128,13 +128,13 @@ int main(int argc, char *argv[])
                             unsigned short payload_id = ntohs(pack.payload.id);
                             printf("<- GET_NAME from '%d' to '%hd'.\n", sender_id, payload_id);
                             if (sender_id != g_id && payload_id == g_id) {
-                                if (g_hash_table_lookup(peers, &sender_id) == NULL) {
+                                printf("-> NAME_ID to '%d'.\n", sender_id);
+                                ns_send_NAME_ID(sock, sa, g_id, g_name, psa);
+                                /*if (g_hash_table_lookup(peers, &sender_id) == NULL) {
                                     ns_hash_table_insert(peers, sender_id, "");
                                     printf("-> GET_NAME to '%d'.\n", sender_id);
                                     ns_send_GET_NAME(sock, sa, g_id, psa, sender_id);
-                                }
-                                printf("-> NAME_ID to '%d'.\n", sender_id);
-                                ns_send_NAME_ID(sock, sa, g_id, g_name, psa);
+                                }*/
                             }
                             break;
                         }
@@ -142,7 +142,7 @@ int main(int argc, char *argv[])
                             pack.payload.name[12] = '\0';
                             printf("<- NAME_ID from '%d' with name '%s'.\n", sender_id, pack.payload.name);
                             if (sender_id != g_id) {
-                                ns_peer_t *info = (ns_peer_t *)g_hash_table_lookup(peers, &sender_id);
+                                ns_peer_t *info = g_hash_table_lookup(peers, &sender_id);
                                 if (info == NULL) {
                                     ns_hash_table_insert(peers, sender_id, pack.payload.name);
                                 } else {
@@ -169,7 +169,7 @@ int main(int argc, char *argv[])
                             printf("<- MASTER from '%d'.\n", sender_id);
                             //TODO:
                             break;
-                        }*/
+                        }
                     }
                 }
             }
