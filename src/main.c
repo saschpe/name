@@ -11,8 +11,6 @@
 #include <sys/socket.h>
 #include <sys/types.h>
 
-#define PORT 57539
-
 static unsigned short g_id;
 static const char *g_name = "Sascha";
 
@@ -55,18 +53,19 @@ int main(int argc, char *argv[])
     GHashTable *peers = g_hash_table_new(g_int_hash, g_int_equal);
     clock_init();
 
-    ns_init(&sock, &sa, PORT);
+    ns_init(&sock, &sa, NS_DEFAULT_PORT);
 
     struct pollfd pfd[1];
     pfd[0].fd = sock;
     pfd[0].events = POLLIN;
 
-    /* Define the the various wait timeouts for different events */
+    /* Set the the various wait timeouts for different events */
     int hello_wait_time = poll_time(get_time() + NS_HELLO_TIMEOUT_MILLISECONDS);
     int election_wait_time = NS_ELECTION_TIMEOUT_MILLISECONDS;
     int election_active = 0;
     int master_wait_time = 0;
 
+    /* Send the first HELLO message to notify others of a new peer */
     ns_send_HELLO(sock, sa, g_id);
     printf("-> HELLO sent.\n");
 
@@ -75,6 +74,7 @@ int main(int argc, char *argv[])
         int ret = poll(pfd, 1, hello_wait_time);
 
         if (ret == 0) {
+            /* HELLO message wait time out, send another one */
             ns_send_HELLO(sock, sa, g_id);
             printf("-> HELLO sent.\n");
 
@@ -85,6 +85,7 @@ int main(int argc, char *argv[])
 
             hello_wait_time = poll_time(get_time() + NS_HELLO_TIMEOUT_MILLISECONDS);
         } else if (ret > 0) {
+            /* An event happend on one of the poll'ed file desciptors */
             if (pfd[0].revents & POLLIN) {
                 struct sockaddr_in psa; socklen_t csalen;
                 ns_packet_t pack;
@@ -102,7 +103,7 @@ int main(int argc, char *argv[])
                                     ns_hash_table_insert(peers, sender_id, "");
                                 } else {
                                     info->last_hello = get_time();
-                                    printf("   Updated last time seen.\n");
+                                    printf("   Updated last HELLO seen time for peer.\n");
                                 }
                                 printf("-> GET_NAME to '%d'.\n", sender_id);
                                 ns_send_GET_NAME(sock, sa, g_id, psa, sender_id);
@@ -171,13 +172,15 @@ int main(int argc, char *argv[])
                         }
                     }
                 }
-            } // if (pfd[0].revents & POLLIN)
+            }
+            /* Adjust the current HELLO wait time to reflect this interruption */
             time_val diff = get_time() - hello_wait_time;
             if (diff > 0) {
                 hello_wait_time -= diff;
             }
         }
     }
+    /* Remove/free all hash table entries and free it afterwards */
     g_hash_table_foreach(peers, ns_hash_table_free, NULL);
     g_hash_table_destroy(peers);
     return 0;
