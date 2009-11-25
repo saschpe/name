@@ -60,10 +60,10 @@ int main(int argc, char *argv[])
     pfd[0].events = POLLIN;
 
     /* Set the the various wait timeouts for different events */
-    int hello_wait_time = poll_time(get_time() + NS_HELLO_TIMEOUT_MILLISECONDS);
-    int election_wait_time = NS_ELECTION_TIMEOUT_MILLISECONDS;
+    time_val hello_wait_time = get_time() + NS_HELLO_TIMEOUT;
+    time_val election_wait_time = 0;
     int election_active = 0;
-    int master_wait_time = 0;
+    time_val master_wait_time = 0;
 
     /* Send the first HELLO message to notify others of a new peer */
     ns_send_HELLO(sock, sa, g_id);
@@ -71,7 +71,7 @@ int main(int argc, char *argv[])
 
     while (1) {
         printf("   Next HELLO wait time: '%lld'\n", hello_wait_time);
-        int ret = poll(pfd, 1, hello_wait_time);
+        int ret = poll(pfd, 1, poll_time(hello_wait_time));
 
         if (ret == 0) {
             /* HELLO message wait time out, send another one */
@@ -79,11 +79,11 @@ int main(int argc, char *argv[])
             printf("-> HELLO sent.\n");
 
             printf("   Check for clients which have not sent a HELLO recently...\n");
-            //TODO:NOTE: This creates a side effect on recvfrom
-            //time_val now_time = get_time();
-            //g_hash_table_foreach_remove(peers, ns_hash_table_check_last_seen, &now_time);
+            time_val now_time = get_time();
+            g_hash_table_foreach_remove(peers, ns_hash_table_check_last_seen, &now_time);
+            ns_hash_table_print(peers);
 
-            hello_wait_time = poll_time(get_time() + NS_HELLO_TIMEOUT_MILLISECONDS);
+            hello_wait_time = get_time() + NS_HELLO_TIMEOUT;
         } else if (ret > 0) {
             /* An event happend on one of the poll'ed file desciptors */
             if (pfd[0].revents & POLLIN) {
@@ -98,7 +98,7 @@ int main(int argc, char *argv[])
                         case HELLO: {
                             printf("<- HELLO from '%d'.\n", sender_id);
                             if (sender_id != g_id) {
-                                ns_peer_t *info = g_hash_table_lookup(peers, &sender_id);
+                                ns_peer_t *info = (ns_peer_t *)g_hash_table_lookup(peers, &sender_id);
                                 if (info == NULL) {
                                     ns_hash_table_insert(peers, sender_id, "");
                                 } else {
@@ -110,7 +110,7 @@ int main(int argc, char *argv[])
                             }
                             break;
                         }
-                        case GET_ID: {
+                        /*case GET_ID: {
                             printf("<- GET_ID from '%d' to name '%s'.\n", sender_id, pack.payload.name);
                             if (sender_id != g_id && strncmp(pack.payload.name, g_name, strlen(g_name))) {
                                 printf("   Message was for me, send NAME_ID message to '%d'.\n", sender_id);
@@ -142,7 +142,7 @@ int main(int argc, char *argv[])
                             pack.payload.name[12] = '\0';
                             printf("<- NAME_ID from '%d' with name '%s'.\n", sender_id, pack.payload.name);
                             if (sender_id != g_id) {
-                                ns_peer_t *info = g_hash_table_lookup(peers, &sender_id);
+                                ns_peer_t *info = (ns_peer_t *)g_hash_table_lookup(peers, &sender_id);
                                 if (info == NULL) {
                                     ns_hash_table_insert(peers, sender_id, pack.payload.name);
                                 } else {
@@ -169,14 +169,9 @@ int main(int argc, char *argv[])
                             printf("<- MASTER from '%d'.\n", sender_id);
                             //TODO:
                             break;
-                        }
+                        }*/
                     }
                 }
-            }
-            /* Adjust the current HELLO wait time to reflect this interruption */
-            time_val diff = get_time() - hello_wait_time;
-            if (diff > 0) {
-                hello_wait_time -= diff;
             }
         }
     }

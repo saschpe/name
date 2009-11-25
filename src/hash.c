@@ -10,15 +10,13 @@
  * id/name pair, constructs a ns_peer_t object and inserts the result
  * into a GHashTable.
  */
-void ns_hash_table_insert(GHashTable *table, int id, const char *name)
+void ns_hash_table_insert(GHashTable *table, unsigned short id, const char *name)
 {
     ns_peer_t *info = (ns_peer_t *)malloc(sizeof(ns_peer_t));
     memset(info, 0, sizeof(ns_peer_t));
 
     if (info != NULL) {
-        // This stupid bullshit is necessary because glib ns_hash tables don't make
-        // copies of provided keys and values, instead store pointers.
-        int *key = (int *)malloc(sizeof(int));
+        unsigned short *key = (unsigned short *)malloc(sizeof(unsigned short));
         *key = id;
         strncpy(info->name, name, strlen(name));
         info->last_hello = get_time();
@@ -50,8 +48,8 @@ gboolean ns_hash_table_check_last_seen(gpointer key, gpointer value, gpointer us
 
     // Difference is current time minus last time seen
     time_val diff = *(time_val *)user_data - info->last_hello;
-    if (diff > NS_HELLO_LAST_TIME_DIFFERENCE_MILLISECONDS) {
-        printf("   Missing HELLO from '%d', remove from list\n", *(int *)key);
+    if (diff > NS_HELLO_LAST_TIME_DIFFERENCE) {
+        printf("   Missing HELLO from '%d', remove from list\n", *(unsigned short *)key);
         return TRUE;
     }
     return FALSE;
@@ -60,7 +58,7 @@ gboolean ns_hash_table_check_last_seen(gpointer key, gpointer value, gpointer us
 static void print_key_value(gpointer key, gpointer value, gpointer user_data)
 {
     ns_peer_t *info = (ns_peer_t *)value;
-    printf("%d:(%s,%lld), ", *(int *)key, info->name, info->last_hello);
+    printf("%d:(%s,%lld), ", *(unsigned short *)key, info->name, info->last_hello);
 }
 
 /**
