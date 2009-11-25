@@ -1,8 +1,10 @@
 #include "clock.h"
-#include "hash.h"
 #include "name.h"
 
+#include <map>
+
 #include <arpa/inet.h>
+#include <limits.h>
 #include <netinet/in.h>
 #include <poll.h>
 #include <stdio.h>
@@ -10,6 +12,7 @@
 #include <string.h>
 #include <sys/socket.h>
 #include <sys/types.h>
+#include <unistd.h>
 
 static unsigned short g_id;
 static const char *g_name = "Sascha";
@@ -50,7 +53,7 @@ int main(int argc, char *argv[])
 
     g_id = getpid();
     parse_cmdline_args(argc, argv);
-    GHashTable *peers = g_hash_table_new(g_int_hash, g_int_equal);
+    std::map<int, ns_peer_t> peer_map;
     clock_init();
 
     ns_init(&sock, &sa, NS_DEFAULT_PORT);
@@ -80,8 +83,13 @@ int main(int argc, char *argv[])
 
             //printf("   Check for clients which have not sent a HELLO recently...\n");
             time_val now_time = get_time();
-            g_hash_table_foreach_remove(peers, ns_hash_table_check_last_seen, &now_time);
-            //ns_hash_table_print(peers);
+            for (std::map<int, ns_peer_t>::iterator it = peer_map.begin(); it != peer_map.end(); it++) {
+                // Difference is current time minus last time seen
+                if ((now_time - (*it).second.last_hello) > NS_HELLO_LAST_TIME_DIFFERENCE) {
+                    printf("   Missing HELLO from '%d', remove from list\n", (*it).first);
+                }
+                peer_map.erase(it);
+            }
 
             hello_wait_time = get_time() + NS_HELLO_TIMEOUT;
         } else if (ret > 0) {
@@ -98,11 +106,13 @@ int main(int argc, char *argv[])
                         case HELLO: {
                             printf("<- HELLO from '%d'.\n", sender_id);
                             if (sender_id != g_id) {
-                                ns_peer_t *info = g_hash_table_lookup(peers, &sender_id);
-                                if (info == NULL) {
-                                    ns_hash_table_insert(peers, sender_id, "");
+                                if (peer_map.find(sender_id) == peer_map.end()) {
+                                    ns_peer_t info;
+                                    strncpy(info.name, "", strlen(""));
+                                    info.last_hello = get_time();
+                                    peer_map[sender_id] = info;
                                 } else {
-                                    info->last_hello = get_time();
+                                    peer_map[sender_id].last_hello = get_time();
                                     printf("   Updated last HELLO timestamp for peer.\n");
                                 }
                                 printf("-> GET_NAME to '%d'.\n", sender_id);
@@ -142,11 +152,13 @@ int main(int argc, char *argv[])
                             pack.payload.name[12] = '\0';
                             printf("<- NAME_ID from '%d' with name '%s'.\n", sender_id, pack.payload.name);
                             if (sender_id != g_id) {
-                                ns_peer_t *info = g_hash_table_lookup(peers, &sender_id);
-                                if (info == NULL) {
-                                    ns_hash_table_insert(peers, sender_id, pack.payload.name);
+                                if (peer_map.find(sender_id) == peer_map.end()) {
+                                    ns_peer_t info;
+                                    strncpy(info.name, "", strlen(""));
+                                    info.last_hello = get_time();
+                                    peer_map[sender_id] = info;
                                 } else {
-                                    strncpy(info->name, pack.payload.name, strlen(pack.payload.name));
+                                    strncpy(peer_map[sender_id].name, pack.payload.name, strlen(pack.payload.name));
                                 }
                             }
                             break;
@@ -175,8 +187,5 @@ int main(int argc, char *argv[])
             }
         }
     }
-    /* Remove/free all hash table entries and free it afterwards */
-    g_hash_table_foreach(peers, ns_hash_table_free, NULL);
-    g_hash_table_destroy(peers);
     return 0;
 }

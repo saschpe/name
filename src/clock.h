@@ -1,11 +1,13 @@
 #ifndef __CLOCK_H
 #define __CLOCK_H
 
+
+
 /** time_val speichert die Zeit in Mikrosekunden (us) seit dem 1.1.1970 */
 typedef long long time_val;
 
 /** Initialisiert die Uhr mit zufaelligen Offset und Driftrate */
-extern void clock_init();
+extern "C" void clock_init();
 
 /** @brief Initialisiert die Uhr mit vorgegebenen Offset und Driftrate
  *
@@ -17,13 +19,13 @@ extern void clock_init();
  * @param t_offset Offset der Uhr [us]
  * @param speed_pct Rate der Uhr [%]
  */
-extern void clock_setup(time_val t_offset, time_val speed_pct);
+extern "C" void clock_setup(time_val t_offset, time_val speed_pct);
 
 /** @brief Liefert die (virtuelle) Zeit zurück
  *
  * @return Zeit seit 1.1.1970 [us]
  */
-extern time_val get_time();
+extern "C" time_val get_time();
 
 
 /** @brief Liefert die Wartezeit für poll() bis zum angegebenen Zeitpunkt
@@ -31,20 +33,20 @@ extern time_val get_time();
  * @param abstime Zeitpunkt bis zu dem gewartet werden soll
  * @return poll()-Wartezeit [ms]
  */
-extern int poll_time(time_val abstime);
+extern "C" int poll_time(time_val abstime);
 
 /** @brief Speichert einen Zeitwert ins Netzwerkformat
  *
  * @param tv Zeitwert
  * @param addr Adresse des Speicherbereichs (muss 8 Bytes Platz bieten)
  */
-extern void time2net(time_val tv, char * addr);
+extern "C" void time2net(time_val tv, char * addr);
 
 /** @brief Liest einen Zeitwert aus einem Netzwerkpaket
  *
  * @param addr Adresse des Speicherbereichs (mit einem 8-Byte-Datenwert)
  * @return Zeitwert
  */
-extern time_val net2time(char * addr);
+extern "C" time_val net2time(char * addr);
 
 #endif // __CLOCK_H
