@@ -53,7 +53,7 @@ int main(int argc, char *argv[])
 
     g_id = getpid();
     parse_cmdline_args(argc, argv);
-    std::map<int, ns_peer_t> peer_map;
+    std::map<int, ns_peer_t> peers;
     clock_init();
 
     ns_init(&sock, &sa, NS_DEFAULT_PORT);
@@ -83,12 +83,12 @@ int main(int argc, char *argv[])
 
             //printf("   Check for clients which have not sent a HELLO recently...\n");
             time_val now_time = get_time();
-            for (std::map<int, ns_peer_t>::iterator it = peer_map.begin(); it != peer_map.end(); it++) {
+            for (std::map<int, ns_peer_t>::iterator it = peers.begin(); it != peers.end(); it++) {
                 // Difference is current time minus last time seen
                 if ((now_time - (*it).second.last_hello) > NS_HELLO_LAST_TIME_DIFFERENCE) {
                     printf("   Missing HELLO from '%d', remove from list\n", (*it).first);
                 }
-                peer_map.erase(it);
+                peers.erase(it);
             }
 
             hello_wait_time = get_time() + NS_HELLO_TIMEOUT;
@@ -100,19 +100,22 @@ int main(int argc, char *argv[])
 
                 if (recvfrom(sock, &pack, sizeof(pack), 0, (struct sockaddr *)&psa, &csalen) != sizeof(pack)) {
                     fprintf(stderr, "Error: Unable to read datagram!\n");
+                    perror("recvfrom");
                 } else {
                     unsigned short sender_id = ntohs(pack.sender_id);
                     switch (ntohs(pack.type)) {
                         case HELLO: {
                             printf("<- HELLO from '%d'.\n", sender_id);
                             if (sender_id != g_id) {
-                                if (peer_map.find(sender_id) == peer_map.end()) {
+                                if (peers.count(sender_id) == 0) {
                                     ns_peer_t info;
+                                    memset(&info, 0, sizeof(info));
                                     strncpy(info.name, "", strlen(""));
                                     info.last_hello = get_time();
-                                    peer_map[sender_id] = info;
+                                    peers[sender_id] = info;
+                                    printf("   Added new peer '%d' with name '%s'\n", sender_id, info.name);
                                 } else {
-                                    peer_map[sender_id].last_hello = get_time();
+                                    peers[sender_id].last_hello = get_time();
                                     printf("   Updated last HELLO timestamp for peer.\n");
                                 }
                                 printf("-> GET_NAME to '%d'.\n", sender_id);
@@ -126,11 +129,16 @@ int main(int argc, char *argv[])
                                 //printf("   Message was for me, send NAME_ID message to '%d'.\n", sender_id);
                                 printf("-> NAME_ID to '%d'.\n", sender_id);
                                 ns_send_NAME_ID(sock, sa, g_id, g_name, psa);
-                                /*if (g_hash_table_lookup(peers, &sender_id) == NULL) {
-                                    ns_hash_table_insert(peers, sender_id, "");
+                                if (peers.count(sender_id) == 0) {
+                                    ns_peer_t info;
+                                    memset(&info, 0, sizeof(info));
+                                    strncpy(info.name, "", strlen(""));
+                                    info.last_hello = get_time();
+                                    peers[sender_id] = info;
+                                    printf("   Added new peer '%d' with name '%s'\n", sender_id, info.name);
                                     printf("-> GET_NAME to '%d'.\n", sender_id);
                                     ns_send_GET_NAME(sock, sa, g_id, psa, sender_id);
-                                }*/
+                                }
                             }
                             break;
                         }
@@ -140,11 +148,16 @@ int main(int argc, char *argv[])
                             if (sender_id != g_id && payload_id == g_id) {
                                 printf("-> NAME_ID to '%d'.\n", sender_id);
                                 ns_send_NAME_ID(sock, sa, g_id, g_name, psa);
-                                /*if (g_hash_table_lookup(peers, &sender_id) == NULL) {
-                                    ns_hash_table_insert(peers, sender_id, "");
+                                if (peers.count(sender_id) == 0) {
+                                    ns_peer_t info;
+                                    memset(&info, 0, sizeof(info));
+                                    strncpy(info.name, "", strlen(""));
+                                    info.last_hello = get_time();
+                                    peers[sender_id] = info;
+                                    printf("   Added new peer '%d' with name '%s'\n", sender_id, info.name);
                                     printf("-> GET_NAME to '%d'.\n", sender_id);
                                     ns_send_GET_NAME(sock, sa, g_id, psa, sender_id);
-                                }*/
+                                }
                             }
                             break;
                         }
@@ -152,13 +165,16 @@ int main(int argc, char *argv[])
                             pack.payload.name[12] = '\0';
                             printf("<- NAME_ID from '%d' with name '%s'.\n", sender_id, pack.payload.name);
                             if (sender_id != g_id) {
-                                if (peer_map.find(sender_id) == peer_map.end()) {
+                                if (peers.count(sender_id) == 0) {
                                     ns_peer_t info;
+                                    memset(&info, 0, sizeof(info));
                                     strncpy(info.name, "", strlen(""));
                                     info.last_hello = get_time();
-                                    peer_map[sender_id] = info;
+                                    peers[sender_id] = info;
+                                    printf("   Added new peer '%d' with name '%s'\n", sender_id, info.name);
                                 } else {
-                                    strncpy(peer_map[sender_id].name, pack.payload.name, strlen(pack.payload.name));
+                                    strncpy(peers[sender_id].name, pack.payload.name, strlen(pack.payload.name));
+                                    printf("   Updated peer '%d' with name '%s'\n", sender_id, peers[sender_id].name);
                                 }
                             }
                             break;
