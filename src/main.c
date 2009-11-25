@@ -86,10 +86,10 @@ int main(int argc, char *argv[])
             hello_wait_time = poll_time(get_time() + NS_HELLO_TIMEOUT_MILLISECONDS);
         } else if (ret > 0) {
             if (pfd[0].revents & POLLIN) {
-                struct sockaddr_in csa; socklen_t csalen;
+                struct sockaddr_in psa; socklen_t csalen;
                 ns_packet_t pack;
 
-                if (recvfrom(sock, &pack, sizeof(pack), 0, (struct sockaddr *)&csa, &csalen) != sizeof(pack)) {
+                if (recvfrom(sock, &pack, sizeof(pack), 0, (struct sockaddr *)&psa, &csalen) != sizeof(pack)) {
                     fprintf(stderr, "Error: Unable to read datagram!\n");
                 } else {
                     unsigned short sender_id = ntohs(pack.sender_id);
@@ -105,7 +105,7 @@ int main(int argc, char *argv[])
                                     printf("   Updated last time seen.\n");
                                 }
                                 printf("-> GET_NAME to '%d'.\n", sender_id);
-                                ns_send_GET_NAME(sock, sa, g_id, csa, sender_id);
+                                ns_send_GET_NAME(sock, sa, g_id, psa, sender_id);
                             }
                             break;
                         }
@@ -116,10 +116,10 @@ int main(int argc, char *argv[])
                                 if (g_hash_table_lookup(peers, &sender_id) == NULL) {
                                     ns_hash_table_insert(peers, sender_id, "");
                                     printf("-> GET_NAME to '%d'.\n", sender_id);
-                                    ns_send_GET_NAME(sock, sa, g_id, csa, sender_id);
+                                    ns_send_GET_NAME(sock, sa, g_id, psa, sender_id);
                                 }
                                 printf("-> NAME_ID to '%d'.\n", sender_id);
-                                ns_send_NAME_ID(sock, sa, g_id, g_name, csa);
+                                ns_send_NAME_ID(sock, sa, g_id, g_name, psa);
                             }
                             break;
                         }
@@ -130,10 +130,10 @@ int main(int argc, char *argv[])
                                 if (g_hash_table_lookup(peers, &sender_id) == NULL) {
                                     ns_hash_table_insert(peers, sender_id, "");
                                     printf("-> GET_NAME to '%d'.\n", sender_id);
-                                    ns_send_GET_NAME(sock, sa, g_id, csa, sender_id);
+                                    ns_send_GET_NAME(sock, sa, g_id, psa, sender_id);
                                 }
                                 printf("-> NAME_ID to '%d'.\n", sender_id);
-                                ns_send_NAME_ID(sock, sa, g_id, g_name, csa);
+                                ns_send_NAME_ID(sock, sa, g_id, g_name, psa);
                             }
                             break;
                         }

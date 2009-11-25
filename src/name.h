@@ -52,8 +52,8 @@ typedef struct ns_peer
 void ns_init(int *sock, struct sockaddr_in *sa, int port);
 
 void ns_send_HELLO(int sock, struct sockaddr_in sa, unsigned short id);
-void ns_send_GET_ID(int sock, struct sockaddr_in sa, unsigned short id, struct sockaddr_in csa, int cid);
-void ns_send_GET_NAME(int sock, struct sockaddr_in sa, unsigned short id, struct sockaddr_in csa, int cid);
+void ns_send_GET_ID(int sock, struct sockaddr_in sa, unsigned short id, struct sockaddr_in csa, unsigned short cid);
+void ns_send_GET_NAME(int sock, struct sockaddr_in sa, unsigned short id, struct sockaddr_in csa, unsigned short cid);
 void ns_send_NAME_ID(int sock, struct sockaddr_in sa, unsigned short id, const char *name, struct sockaddr_in csa);
 
 void ns_send_START_ELECTION(int sock, struct sockaddr_in sa, unsigned short id);

@@ -6,7 +6,9 @@
 #include <string.h>
 
 /**
- *
+ * Convenience wrapper that makes dynamically allocated copies of an
+ * id/name pair, constructs a ns_peer_t object and inserts the result
+ * into a GHashTable.
  */
 void ns_hash_table_insert(GHashTable *table, int id, const char *name)
 {
@@ -29,7 +31,7 @@ void ns_hash_table_insert(GHashTable *table, int id, const char *name)
 }
 
 /**
- *
+ * Frees the dynamically allocated memory of a key/value pair in a GHashTable
  */
 void ns_hash_table_free(gpointer key, gpointer value, gpointer user_data)
 {
@@ -37,6 +39,11 @@ void ns_hash_table_free(gpointer key, gpointer value, gpointer user_data)
     g_free(value);
 }
 
+/**
+ * Checks the the time when the last HELLO message was received from another
+ * peer. Returns TRUE if that time was longer than a default time difference
+ * so that this peer can be removed from a GHashTable of peers.
+ */
 gboolean ns_hash_table_check_last_seen(gpointer key, gpointer value, gpointer user_data)
 {
     ns_peer_t *info = (ns_peer_t *)value;
@@ -57,7 +64,7 @@ static void print_key_value(gpointer key, gpointer value, gpointer user_data)
 }
 
 /**
- *
+ * Prints a GHashTable with ns_peer_t entries.
  */
 void ns_hash_table_print(GHashTable *table)
 {

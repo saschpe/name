@@ -29,7 +29,7 @@ void ns_init(int *sock, struct sockaddr_in *sa, int port)
 }
 
 /**
- *
+ * Broadcast a HELLO message.
  */
 void ns_send_HELLO(int sock, struct sockaddr_in sa, unsigned short id)
 {
@@ -46,47 +46,47 @@ void ns_send_HELLO(int sock, struct sockaddr_in sa, unsigned short id)
 }
 
 /**
- * Send a GET_NAME package.
+ * Send a GET_NAME package to a peer.
  *
- * cid has to be in network byte order
+ * pid has to be in network byte order
  */
-void ns_send_GET_NAME(int sock, struct sockaddr_in sa, unsigned short id, struct sockaddr_in csa, int cid)
+void ns_send_GET_NAME(int sock, struct sockaddr_in sa, unsigned short id, struct sockaddr_in psa, unsigned short pid)
 {
     struct ns_packet pack;
 
     memset(&pack, 0, sizeof(pack));
     pack.sender_id = htons(id);
     pack.type = htons(GET_NAME);
-    pack.payload.id = htons(cid);
-    sa.sin_addr.s_addr = csa.sin_addr.s_addr;
+    pack.payload.id = htons(pid);
+    sa.sin_addr.s_addr = psa.sin_addr.s_addr;
     if (sendto(sock, (void *)&pack, sizeof(pack), 0, (struct sockaddr *)&sa, sizeof(sa)) < 0) {
         perror("sendto");
     }
 }
 
 /**
- * Send a GET_ID package.
+ * Send a GET_ID package to a peer.
  *
- * cid has to be in network byte order
+ * pid has to be in network byte order
  */
-void ns_send_GET_ID(int sock, struct sockaddr_in sa, unsigned short id, struct sockaddr_in csa, int cid)
+void ns_send_GET_ID(int sock, struct sockaddr_in sa, unsigned short id, struct sockaddr_in psa, unsigned short pid)
 {
     struct ns_packet pack;
 
     memset(&pack, 0, sizeof(pack));
     pack.sender_id = htons(id);
     pack.type = htons(GET_ID);
-    pack.payload.id = htons(cid);
-    sa.sin_addr.s_addr = csa.sin_addr.s_addr;
+    pack.payload.id = htons(pid);
+    sa.sin_addr.s_addr = psa.sin_addr.s_addr;
     if (sendto(sock, (void *)&pack, sizeof(pack), 0, (struct sockaddr *)&sa, sizeof(sa)) < 0) {
         perror("sendto");
     }
 }
 
 /**
- *
+ * Send a NAME_ID package to a peer.
  */
-void ns_send_NAME_ID(int sock, struct sockaddr_in sa, unsigned short id, const char *name, struct sockaddr_in csa)
+void ns_send_NAME_ID(int sock, struct sockaddr_in sa, unsigned short id, const char *name, struct sockaddr_in psa)
 {
     struct ns_packet pack;
 
@@ -94,14 +94,14 @@ void ns_send_NAME_ID(int sock, struct sockaddr_in sa, unsigned short id, const c
     pack.sender_id = htons(id);
     pack.type = htons(NAME_ID);
     strncpy(pack.payload.name, name, strlen(name));
-    sa.sin_addr.s_addr = csa.sin_addr.s_addr;
+    sa.sin_addr.s_addr = psa.sin_addr.s_addr;
     if (sendto(sock, (void *)&pack, sizeof(pack), 0, (struct sockaddr *)&sa, sizeof(sa)) < 0) {
         perror("sendto");
     }
 }
 
 /**
- *
+ * Broadcast an ELECTION packet.
  */
 void ns_send_ELECTION(int sock, struct sockaddr_in sa, unsigned short id)
 {
