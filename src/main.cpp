@@ -53,9 +53,10 @@ int main(int argc, char *argv[])
 
     g_id = getpid();
     parse_cmdline_args(argc, argv);
-    std::map<int, ns_peer_t> peers;
-    clock_init();
+    std::map<unsigned short, ns_peer_t> peers;
+    std::map<unsigned short, ns_peer_t>::iterator it;
 
+    clock_init();
     ns_init(&sock, &sa, NS_DEFAULT_PORT);
 
     struct pollfd pfd[1];
@@ -83,12 +84,12 @@ int main(int argc, char *argv[])
 
             //printf("   Check for clients which have not sent a HELLO recently...\n");
             time_val now_time = get_time();
-            for (std::map<int, ns_peer_t>::iterator it = peers.begin(); it != peers.end(); it++) {
+            for (it = peers.begin(); it != peers.end(); it++) {
                 // Difference is current time minus last time seen
                 if ((now_time - (*it).second.last_hello) > NS_HELLO_LAST_TIME_DIFFERENCE) {
                     printf("   Missing HELLO from '%d', remove from list\n", (*it).first);
+                    peers.erase(it);
                 }
-                peers.erase(it);
             }
 
             hello_wait_time = get_time() + NS_HELLO_TIMEOUT;
@@ -114,12 +115,12 @@ int main(int argc, char *argv[])
                                     info.last_hello = get_time();
                                     peers[sender_id] = info;
                                     printf("   Added new peer '%d' with name '%s'\n", sender_id, info.name);
+                                    printf("-> GET_NAME to '%d'.\n", sender_id);
+                                    ns_send_GET_NAME(sock, sa, g_id, psa, sender_id);
                                 } else {
                                     peers[sender_id].last_hello = get_time();
                                     printf("   Updated last HELLO timestamp for peer.\n");
                                 }
-                                printf("-> GET_NAME to '%d'.\n", sender_id);
-                                ns_send_GET_NAME(sock, sa, g_id, psa, sender_id);
                             }
                             break;
                         }
@@ -168,7 +169,7 @@ int main(int argc, char *argv[])
                                 if (peers.count(sender_id) == 0) {
                                     ns_peer_t info;
                                     memset(&info, 0, sizeof(info));
-                                    strncpy(info.name, "", strlen(""));
+                                    strncpy(info.name, pack.payload.name, strlen(pack.payload.name));
                                     info.last_hello = get_time();
                                     peers[sender_id] = info;
                                     printf("   Added new peer '%d' with name '%s'\n", sender_id, info.name);
