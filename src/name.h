@@ -1,11 +1,16 @@
 #ifndef NAME_H
 #define NAME_H
 
+#include "clock.h"
+
 #include <arpa/inet.h>
 
-#define NS_ELECTION_TIMEOUT 300
-#define NS_MASTER_TIMEOUT 600
-#define NS_HELLO_TIMEOUT 10000
+#define NS_ELECTION_TIMEOUT_MICROSECONDS 300
+#define NS_ELECTION_TIMEOUT_MILLISECONDS (NS_ELECTION_TIMEOUT_MICROSECONDS * 1000)
+#define NS_HELLO_TIMEOUT_MICROSECONDS 10000
+#define NS_HELLO_TIMEOUT_MILLISECONDS (NS_HELLO_TIMEOUT_MICROSECONDS * 1000)
+#define NS_MASTER_TIMEOUT_MICROSECONDS 600
+#define NS_MASTER_TIMEOUT_MILLISECONDS (NS_MASTER_TIMEOUT_MICROSECONDS * 1000)
 
 /**
  * Defines the possible packet types
@@ -38,7 +43,7 @@ typedef struct ns_packet {
 typedef struct ns_peer
 {
     char name[12];
-    long long last_hello;
+    time_val last_hello;
 } ns_peer_t;
 
 void ns_init(int *sock, struct sockaddr_in *sa, int port);
