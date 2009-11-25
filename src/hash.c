@@ -11,6 +11,7 @@
 void ns_hash_table_insert(GHashTable *table, int id, const char *name)
 {
     ns_peer_t *info = (ns_peer_t *)malloc(sizeof(ns_peer_t));
+    memset(info, 0, sizeof(ns_peer_t));
 
     if (info != NULL) {
         // This stupid bullshit is necessary because glib ns_hash tables don't make
@@ -34,6 +35,19 @@ void ns_hash_table_free(gpointer key, gpointer value, gpointer user_data)
 {
     g_free(key);
     g_free(value);
+}
+
+gboolean ns_hash_table_check_last_seen(gpointer key, gpointer value, gpointer user_data)
+{
+    ns_peer_t *info = (ns_peer_t *)value;
+
+    // Difference is current time minus last time seen
+    time_val diff = *(time_val *)user_data - info->last_hello;
+    if (diff > NS_HELLO_LAST_TIME_DIFFERENCE_MILLISECONDS) {
+        printf("   Missing HELLO from '%d', remove from list\n", *(int *)key);
+        return TRUE;
+    }
+    return FALSE;
 }
 
 static void print_key_value(gpointer key, gpointer value, gpointer user_data)

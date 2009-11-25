@@ -67,23 +67,29 @@ int main(int argc, char *argv[])
     int election_active = 0;
     int master_wait_time = 0;
 
-    printf("-> HELLO sent.\n");
     ns_send_HELLO(sock, sa, g_id);
+    printf("-> HELLO sent.\n");
 
     while (1) {
         printf("   Next HELLO wait time: '%lld'\n", hello_wait_time);
         int ret = poll(pfd, 1, hello_wait_time);
 
         if (ret == 0) {
-            printf("-> HELLO sent.\n");
             ns_send_HELLO(sock, sa, g_id);
+            printf("-> HELLO sent.\n");
+
+            printf("   Check for clients which have not sent a HELLO recently...\n");
+            //TODO:NOTE: This creates a side effect on recvfrom
+            //time_val now_time = get_time();
+            //g_hash_table_foreach_remove(peers, ns_hash_table_check_last_seen, &now_time);
+
             hello_wait_time = poll_time(get_time() + NS_HELLO_TIMEOUT_MILLISECONDS);
         } else if (ret > 0) {
             if (pfd[0].revents & POLLIN) {
                 struct sockaddr_in csa; socklen_t csalen;
                 ns_packet_t pack;
 
-                if (recvfrom(sock, &pack, sizeof(pack), 0, (struct sockaddr *)&csa, &csalen) < 0) {
+                if (recvfrom(sock, &pack, sizeof(pack), 0, (struct sockaddr *)&csa, &csalen) != sizeof(pack)) {
                     fprintf(stderr, "Error: Unable to read datagram!\n");
                 } else {
                     unsigned short sender_id = ntohs(pack.sender_id);
