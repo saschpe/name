@@ -11,21 +11,21 @@
  * Send HELLO message timeout in [us]
  */
 #define NS_HELLO_TIMEOUT (10 * 1000 * 1000)
-#define NS_HELLO_LAST_TIME_DIFFERENCE (NS_HELLO_TIMEOUT * 2)
+#define NS_HELLO_LAST_TIME_DIFFERENCE (NS_HELLO_TIMEOUT * 3)
 #define NS_ELECTION_TIMEOUT (300 * 1000)
 #define NS_MASTER_TIMEOUT (600 * 1000)
 
 /**
- * Defines the possible packet types
+* Defines the possible packet types.
  */
 typedef enum ns_packet_type {
     HELLO = 1,
-    GET_ID,
-    GET_NAME,
-    NAME_ID,
-    START_ELECTION,
-    ELECTION,
-    MASTER
+    GET_ID = 2,
+    GET_NAME = 3,
+    NAME_ID = 4,
+    START_ELECTION = 5,
+    ELECTION = 6,
+    MASTER = 7
 } ns_packet_type_t;
 
 /**
@@ -41,7 +41,7 @@ typedef struct ns_packet {
 } __attribute((packed)) ns_packet_t;
 
 /**
- * Holds the information about other clients
+ * Holds the information about other clients.
  */
 typedef struct ns_peer
 {
