@@ -46,7 +46,7 @@ static void parse_cmdline_args(int argc, char *argv[])
     }
 }
 
-static void add_peer(std::map<unsigned short, ns_peer_t> &peers, unsigned short id)
+static void peers_add(std::map<unsigned short, ns_peer_t> &peers, unsigned short id)
 {
     ns_peer_t info;
     memset(&info, 0, sizeof(info));
@@ -54,6 +54,19 @@ static void add_peer(std::map<unsigned short, ns_peer_t> &peers, unsigned short 
     info.last_hello = get_time();
     peers[id] = info;
     printf("   Added new peer '%d' with name '%s'\n", id, info.name);
+}
+
+static void peers_cleanup(std::map<unsigned short, ns_peer_t> &peers)
+{
+    //printf("   Check for clients which have not sent a HELLO recently...\n");
+    time_val now_time = get_time();
+    for (std::map<unsigned short, ns_peer_t>::iterator it = peers.begin(); it != peers.end(); it++) {
+        // Difference is current time minus last time seen
+        if ((now_time - (*it).second.last_hello) > NS_HELLO_LAST_TIME_DIFFERENCE) {
+            printf("   Missing HELLO from '%d', remove from list\n", (*it).first);
+            peers.erase(it);
+        }
+    }
 }
 
 int main(int argc, char *argv[])
@@ -64,7 +77,6 @@ int main(int argc, char *argv[])
     g_id = getpid();
     parse_cmdline_args(argc, argv);
     std::map<unsigned short, ns_peer_t> peers;
-    std::map<unsigned short, ns_peer_t>::iterator it;
 
     clock_init();
     ns_init(&sock, &sa, NS_DEFAULT_PORT);
@@ -92,34 +104,35 @@ int main(int argc, char *argv[])
             ns_send_HELLO(sock, sa, g_id);
             printf("-> HELLO\n");
 
-            //printf("   Check for clients which have not sent a HELLO recently...\n");
-            time_val now_time = get_time();
-            for (it = peers.begin(); it != peers.end(); it++) {
-                // Difference is current time minus last time seen
-                if ((now_time - (*it).second.last_hello) > NS_HELLO_LAST_TIME_DIFFERENCE) {
-                    printf("   Missing HELLO from '%d', remove from list\n", (*it).first);
-                    peers.erase(it);
-                }
-            }
+            peers_cleanup(peers);
 
             hello_wait_time = get_time() + NS_HELLO_TIMEOUT;
         } else if (ret > 0) {
             /* An event happend on one of the poll'ed file desciptors */
             if (pfd[0].revents & POLLIN) {
-                struct sockaddr_in psa; socklen_t csalen;
-                ns_packet_t pack;
+                struct sockaddr_in psa; socklen_t csalen = sizeof(struct sockaddr_in);
 
-                if (recvfrom(sock, &pack, sizeof(pack), 0, (struct sockaddr *)&psa, &csalen) != sizeof(pack)) {
+                /* This loop might be necessary as it is not guaranteed to receive the
+                   whole package with one call to recvfrom() */
+                int byte_read = 0;
+                char buf[64];
+                while (byte_read < sizeof(ns_packet_t)) {
+                    byte_read += recvfrom(sock, buf, 64, 0, (struct sockaddr *)&psa, &csalen);
+                }
+
+                if (byte_read > sizeof(ns_packet_t)) {
                     fprintf(stderr, "Error: Unable to read datagram!\n");
                     perror("recvfrom");
                 } else {
+                    ns_packet_t pack;
+                    memcpy(&pack, buf, sizeof(ns_packet_t));
                     unsigned short sender_id = ntohs(pack.sender_id);
                     switch (ntohs(pack.type)) {
                         case HELLO: {
                             printf("<- HELLO from '%d'.\n", sender_id);
                             if (sender_id != g_id) {
                                 if (peers.count(sender_id) == 0 || strlen(peers[sender_id].name) == 0) {
-                                    add_peer(peers, sender_id);
+                                    peers_add(peers, sender_id);
                                     printf("-> GET_NAME to '%d'.\n", sender_id);
                                     ns_send_GET_NAME(sock, sa, g_id, psa, sender_id);
                                 } else {
@@ -136,7 +149,7 @@ int main(int argc, char *argv[])
                                 printf("-> NAME_ID to '%d'.\n", sender_id);
                                 ns_send_NAME_ID(sock, sa, g_id, g_name, psa);
                                 if (peers.count(sender_id) == 0) {
-                                    add_peer(peers, sender_id);
+                                    peers_add(peers, sender_id);
                                     printf("-> GET_NAME to '%d'.\n", sender_id);
                                     ns_send_GET_NAME(sock, sa, g_id, psa, sender_id);
                                 }
@@ -150,7 +163,7 @@ int main(int argc, char *argv[])
                                 printf("-> NAME_ID to '%d'.\n", sender_id);
                                 ns_send_NAME_ID(sock, sa, g_id, g_name, psa);
                                 if (peers.count(sender_id) == 0) {
-                                    add_peer(peers, sender_id);
+                                    peers_add(peers, sender_id);
                                     printf("-> GET_NAME to '%d'.\n", sender_id);
                                     ns_send_GET_NAME(sock, sa, g_id, psa, sender_id);
                                 }
@@ -162,7 +175,7 @@ int main(int argc, char *argv[])
                             printf("<- NAME_ID from '%d' with name '%s'.\n", sender_id, pack.payload.name);
                             if (sender_id != g_id) {
                                 if (peers.count(sender_id) == 0) {
-                                    add_peer(peers, sender_id);
+                                    peers_add(peers, sender_id);
                                 }
                                 strncpy(peers[sender_id].name, pack.payload.name, strlen(pack.payload.name));
                                 printf("   Updated peer '%d' with name '%s'\n", sender_id, peers[sender_id].name);
@@ -174,8 +187,11 @@ int main(int argc, char *argv[])
                             if (sender_id > g_id) {
                                 printf("-> ELECTION\n");
                                 ns_send_ELECTION(sock, sa, g_id);
+                                election_wait_time = get_time() + NS_ELECTION_TIMEOUT;
                             }
                             //TODO:
+                            election_active = 1;
+                            master_wait_time = get_time() + NS_MASTER_TIMEOUT;
                             break;
                         }
                         case ELECTION: {
@@ -186,6 +202,7 @@ int main(int argc, char *argv[])
                         case MASTER: {
                             printf("<- MASTER from '%d'.\n", sender_id);
                             //TODO:
+                            election_active = 0;
                             break;
                         }
                     }
