@@ -75,6 +75,7 @@ int main(int argc, char *argv[])
     struct sockaddr_in sa;
 
     g_id = getpid();
+    master_id = g_id;
     parse_cmdline_args(argc, argv);
     std::map<unsigned short, ns_peer_t> peers;
 
@@ -97,6 +98,8 @@ int main(int argc, char *argv[])
     /* Send the first HELLO message to notify others of a new peer */
     ns_send_HELLO(sock, sa, g_id);
     printf("-> HELLO\n");
+    /* Send the first START_ELECTION message to notify others of a new peer */
+    ns_send_START_ELECTION(sock, sa, g_id);
 
     while (1) {
         //printf("   Next HELLO wait time: '%lld'\n", remaining_hello_wait_time);
@@ -199,15 +202,15 @@ int main(int argc, char *argv[])
                         case START_ELECTION: {
                             /* Set state */
                             in_election = 1;
-                            wait_for_master = 0;
 
                             printf("<- START_ELECTION from '%d'.\n", sender_id);
-                            if (sender_id > g_id) {
+                            if (sender_id >= g_id) {
                                 printf("-> ELECTION\n");
+                                wait_for_master = 0;
                                 ns_send_ELECTION(sock, sa, g_id);
                                 remaining_election_wait_time = get_time() + NS_ELECTION_TIMEOUT;
                             } else {
-                                //TODO:
+                                wait_for_master = 1;
                                 remaining_election_wait_time = get_time() + NS_MASTER_TIMEOUT;
                             }
                             break;
@@ -220,9 +223,10 @@ int main(int argc, char *argv[])
                         case MASTER: {
                             /* Set state */
                             in_election = 0;
+                            wait_for_master = 0;
 
+                            master_id = sender_id;
                             printf("<- MASTER from '%d'.\n", sender_id);
-                            //TODO:
                             break;
                         }
                     }
