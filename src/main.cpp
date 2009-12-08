@@ -15,7 +15,10 @@
 #include <unistd.h>
 
 static unsigned short g_id;
+static unsigned short g_master_id;
 static const char *g_name = "Sascha";
+static int g_sock;
+static struct sockaddr_in g_sa;
 
 static void print_usage(const char *prog_name)
 {
@@ -65,25 +68,24 @@ static void peers_cleanup(std::map<unsigned short, ns_peer_t> &peers)
         if ((now_time - (*it).second.last_hello) > NS_HELLO_LAST_TIME_DIFFERENCE) {
             printf("   Missing HELLO from '%d', remove from list\n", (*it).first);
             peers.erase(it);
+            ns_send_START_ELECTION(g_sock, g_sa, g_id);
         }
     }
 }
 
 int main(int argc, char *argv[])
 {
-    int sock;
-    struct sockaddr_in sa;
 
     g_id = getpid();
-    master_id = g_id;
+    g_master_id = g_id;
     parse_cmdline_args(argc, argv);
     std::map<unsigned short, ns_peer_t> peers;
 
     clock_init();
-    ns_init(&sock, &sa, NS_DEFAULT_PORT);
+    ns_init(&g_sock, &g_sa, NS_DEFAULT_PORT);
 
     struct pollfd pfd[1];
-    pfd[0].fd = sock;
+    pfd[0].fd = g_sock;
     pfd[0].events = POLLIN;
 
     /* Set the the various wait timeouts for different events */
@@ -96,10 +98,10 @@ int main(int argc, char *argv[])
     int wait_for_master = 0;
 
     /* Send the first HELLO message to notify others of a new peer */
-    ns_send_HELLO(sock, sa, g_id);
+    ns_send_HELLO(g_sock, g_sa, g_id);
     printf("-> HELLO\n");
     /* Send the first START_ELECTION message to notify others of a new peer */
-    ns_send_START_ELECTION(sock, sa, g_id);
+    ns_send_START_ELECTION(g_sock, g_sa, g_id);
 
     while (1) {
         //printf("   Next HELLO wait time: '%lld'\n", remaining_hello_wait_time);
@@ -114,7 +116,7 @@ int main(int argc, char *argv[])
             remaining_hello_wait_time -= poll_diff;
             if (remaining_hello_wait_time <= 0) {
                 /* HELLO message wait timeout, send another one */
-                ns_send_HELLO(sock, sa, g_id);
+                ns_send_HELLO(g_sock, g_sa, g_id);
                 printf("-> HELLO\n");
 
                 peers_cleanup(peers);
@@ -139,7 +141,7 @@ int main(int argc, char *argv[])
                 struct sockaddr_in psa; socklen_t csalen = sizeof(struct sockaddr_in);
                 ns_packet_t pack;
 
-                if (recvfrom(sock, &pack, sizeof(ns_packet_t), 0, (struct sockaddr *)&psa, &csalen) == -1) {
+                if (recvfrom(g_sock, &pack, sizeof(ns_packet_t), 0, (struct sockaddr *)&psa, &csalen) == -1) {
                     fprintf(stderr, "Error: Unable to read datagram!\n");
                     perror("recvfrom");
                 } else {
@@ -151,7 +153,7 @@ int main(int argc, char *argv[])
                                 if (peers.count(sender_id) == 0 || strlen(peers[sender_id].name) == 0) {
                                     peers_add(peers, sender_id);
                                     printf("-> GET_NAME to '%d'.\n", sender_id);
-                                    ns_send_GET_NAME(sock, sa, g_id, psa, sender_id);
+                                    ns_send_GET_NAME(g_sock, g_sa, g_id, psa, sender_id);
                                 } else {
                                     peers[sender_id].last_hello = get_time();
                                     printf("   Updated last HELLO timestamp for peer.\n");
@@ -164,11 +166,11 @@ int main(int argc, char *argv[])
                             if (sender_id != g_id && strncmp(pack.payload.name, g_name, strlen(g_name))) {
                                 //printf("   Message was for me, send NAME_ID message to '%d'.\n", sender_id);
                                 printf("-> NAME_ID to '%d'.\n", sender_id);
-                                ns_send_NAME_ID(sock, sa, g_id, g_name, psa);
+                                ns_send_NAME_ID(g_sock, g_sa, g_id, g_name, psa);
                                 if (peers.count(sender_id) == 0) {
                                     peers_add(peers, sender_id);
                                     printf("-> GET_NAME to '%d'.\n", sender_id);
-                                    ns_send_GET_NAME(sock, sa, g_id, psa, sender_id);
+                                    ns_send_GET_NAME(g_sock, g_sa, g_id, psa, sender_id);
                                 }
                             }
                             break;
@@ -178,11 +180,11 @@ int main(int argc, char *argv[])
                             printf("<- GET_NAME from '%d' to '%hd'.\n", sender_id, payload_id);
                             if (sender_id != g_id && payload_id == g_id) {
                                 printf("-> NAME_ID to '%d'.\n", sender_id);
-                                ns_send_NAME_ID(sock, sa, g_id, g_name, psa);
+                                ns_send_NAME_ID(g_sock, g_sa, g_id, g_name, psa);
                                 if (peers.count(sender_id) == 0) {
                                     peers_add(peers, sender_id);
                                     printf("-> GET_NAME to '%d'.\n", sender_id);
-                                    ns_send_GET_NAME(sock, sa, g_id, psa, sender_id);
+                                    ns_send_GET_NAME(g_sock, g_sa, g_id, psa, sender_id);
                                 }
                             }
                             break;
@@ -207,7 +209,7 @@ int main(int argc, char *argv[])
                             if (sender_id >= g_id) {
                                 printf("-> ELECTION\n");
                                 wait_for_master = 0;
-                                ns_send_ELECTION(sock, sa, g_id);
+                                ns_send_ELECTION(g_sock, g_sa, g_id);
                                 remaining_election_wait_time = get_time() + NS_ELECTION_TIMEOUT;
                             } else {
                                 wait_for_master = 1;
@@ -225,7 +227,7 @@ int main(int argc, char *argv[])
                             in_election = 0;
                             wait_for_master = 0;
 
-                            master_id = sender_id;
+                            g_master_id = sender_id;
                             printf("<- MASTER from '%d'.\n", sender_id);
                             break;
                         }
