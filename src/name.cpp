@@ -100,7 +100,7 @@ void ns_send_NAME_ID(int sock, struct sockaddr_in sa, unsigned short id, const c
     }
 }
 /**
- * Broadcast an START_ELECTION packet.
+ * Broadcast a START_ELECTION packet.
  */
 void ns_send_START_ELECTION(int sock, struct sockaddr_in sa, unsigned short id)
 {
@@ -127,6 +127,23 @@ void ns_send_ELECTION(int sock, struct sockaddr_in sa, unsigned short id)
     memset(&pack, 0, sizeof(pack));
     pack.sender_id = htons(id);
     pack.type = htons(ELECTION);
+    /* inet_addr("127.0.0.1"); */
+    if (sendto(sock, (void *)&pack, sizeof(pack), 0, (struct sockaddr *)&sa, sizeof(sa)) < 0) {
+        perror("sendto"); exit(6);
+    }
+}
+
+/**
+ * Broadcast a MASTER packet.
+ */
+void ns_send_MASTER(int sock, struct sockaddr_in sa, unsigned short id)
+{
+    struct ns_packet pack;
+
+    sa.sin_addr.s_addr = htonl(INADDR_BROADCAST);
+    memset(&pack, 0, sizeof(pack));
+    pack.sender_id = htons(id);
+    pack.type = htons(MASTER);
     /* inet_addr("127.0.0.1"); */
     if (sendto(sock, (void *)&pack, sizeof(pack), 0, (struct sockaddr *)&sa, sizeof(sa)) < 0) {
         perror("sendto"); exit(6);
