@@ -15,10 +15,13 @@
 #include <unistd.h>
 
 static unsigned short g_id;
-static unsigned short g_master_id;
 static const char *g_name = "Sascha";
 static int g_sock;
 static struct sockaddr_in g_sa;
+
+static unsigned short g_master_id;
+static int g_in_election = 0;
+static int g_wait_for_master = 0;
 
 static void print_usage(const char *prog_name)
 {
@@ -49,6 +52,17 @@ static void parse_cmdline_args(int argc, char *argv[])
     }
 }
 
+/**
+ * Simple helper function
+ */
+static void start_election()
+{
+    g_in_election = 1;
+    g_wait_for_master = 0;
+    ns_send_START_ELECTION(g_sock, g_sa, g_id);
+    printf("-> START_ELECTION\n");
+}
+
 static void peers_add(std::map<unsigned short, ns_peer_t> &peers, unsigned short id)
 {
     ns_peer_t info;
@@ -68,7 +82,7 @@ static void peers_cleanup(std::map<unsigned short, ns_peer_t> &peers)
         if ((now_time - (*it).second.last_hello) > NS_HELLO_LAST_TIME_DIFFERENCE) {
             printf("   Missing HELLO from '%d', remove from list\n", (*it).first);
             peers.erase(it);
-            ns_send_START_ELECTION(g_sock, g_sa, g_id);
+            start_election();
         }
     }
 }
@@ -93,15 +107,12 @@ int main(int argc, char *argv[])
     time_val remaining_election_wait_time = 0;
     time_val remaining_wait_time = remaining_hello_wait_time;
 
-    /* Simple state tracking (whish: state machine) */
-    int in_election = 0;
-    int wait_for_master = 0;
-
     /* Send the first HELLO message to notify others of a new peer */
     ns_send_HELLO(g_sock, g_sa, g_id);
     printf("-> HELLO\n");
+
     /* Send the first START_ELECTION message to notify others of a new peer */
-    ns_send_START_ELECTION(g_sock, g_sa, g_id);
+    start_election();
 
     while (1) {
         //printf("   Next HELLO wait time: '%lld'\n", remaining_hello_wait_time);
@@ -126,13 +137,18 @@ int main(int argc, char *argv[])
             }
 
             /* Handle election timeout if in election */
-            if (in_election) {
+            if (g_in_election) {
                 remaining_election_wait_time -= poll_diff;
                 if (remaining_election_wait_time <= 0) {
-                    printf("   Election timeout occured!\n");
-                    // TODO: React on this
+                    if (g_wait_for_master) {
+                        printf("   Election timeout occured while waiting for MASTER.\n");
+                        remaining_election_wait_time = get_time() + NS_MASTER_TIMEOUT;
+                    } else {
+                        printf("   Election timeout occured while waiting for ELECTION.\n");
+                        remaining_election_wait_time = get_time() + NS_ELECTION_TIMEOUT;
+                    }
+                    remaining_wait_time = remaining_election_wait_time;
                 }
-                remaining_wait_time = remaining_election_wait_time;
             }
 
         } else if (ret > 0) {
@@ -203,16 +219,16 @@ int main(int argc, char *argv[])
                         }
                         case START_ELECTION: {
                             /* Set state */
-                            in_election = 1;
+                            g_in_election = 1;
 
                             printf("<- START_ELECTION from '%d'.\n", sender_id);
-                            if (sender_id >= g_id) {
+                            if (sender_id < g_id) {
                                 printf("-> ELECTION\n");
-                                wait_for_master = 0;
+                                g_wait_for_master = 0;
                                 ns_send_ELECTION(g_sock, g_sa, g_id);
                                 remaining_election_wait_time = get_time() + NS_ELECTION_TIMEOUT;
                             } else {
-                                wait_for_master = 1;
+                                g_wait_for_master = 1;
                                 remaining_election_wait_time = get_time() + NS_MASTER_TIMEOUT;
                             }
                             break;
@@ -220,12 +236,16 @@ int main(int argc, char *argv[])
                         case ELECTION: {
                             printf("<- ELECTION from '%d'.\n", sender_id);
                             //TODO:
+                            if (!g_in_election) {
+                                printf("   Not in an election, start a new one!\n");
+                                start_election();
+                            }
                             break;
                         }
                         case MASTER: {
                             /* Set state */
-                            in_election = 0;
-                            wait_for_master = 0;
+                            g_in_election = 0;
+                            g_wait_for_master = 0;
 
                             g_master_id = sender_id;
                             printf("<- MASTER from '%d'.\n", sender_id);
