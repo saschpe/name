@@ -23,6 +23,7 @@ static unsigned short g_master_id;
 static unsigned short g_max_election_id;
 static int g_in_election = 0;
 static int g_wait_for_master = 0;
+static int g_wait_again = 0;
 
 static void print_usage(const char *prog_name)
 {
@@ -64,6 +65,13 @@ static void start_election()
     printf("-> START_ELECTION\n");
 }
 
+static void send_master()
+{
+    g_wait_for_master = 0;
+    ns_send_MASTER(g_sock, g_sa, g_id);
+    printf("--> MASTER\n");
+}
+
 static void peers_add(std::map<unsigned short, ns_peer_t> &peers, unsigned short id)
 {
     ns_peer_t info;
@@ -90,11 +98,11 @@ static void peers_cleanup(std::map<unsigned short, ns_peer_t> &peers)
 
 int main(int argc, char *argv[])
 {
-
     g_id = getpid();
     g_master_id = g_id;
-    parse_cmdline_args(argc, argv);
     std::map<unsigned short, ns_peer_t> peers;
+
+    parse_cmdline_args(argc, argv);
 
     clock_init();
     ns_init(&g_sock, &g_sa, NS_DEFAULT_PORT);
@@ -104,9 +112,8 @@ int main(int argc, char *argv[])
     pfd[0].events = POLLIN;
 
     /* Set the the various wait timeouts for different events */
-    time_val remaining_hello_wait_time = get_time() + NS_HELLO_TIMEOUT;
-    time_val remaining_election_wait_time = 0;
-    time_val remaining_wait_time = remaining_hello_wait_time;
+    time_val hello_wait_time = get_time() + NS_HELLO_TIMEOUT;
+    time_val election_wait_time = 0;
 
     /* Send the first HELLO message to notify others of a new peer */
     ns_send_HELLO(g_sock, g_sa, g_id);
@@ -116,39 +123,35 @@ int main(int argc, char *argv[])
     start_election();
 
     while (1) {
-        //printf("   Next HELLO wait time: '%lld'\n", remaining_hello_wait_time);
+        //printf("   Next HELLO wait time: '%lld'\n", hello_wait_time);
         time_val poll_timestamp = get_time();
-        int ret = poll(pfd, 1, poll_time(remaining_wait_time));
+        int ret = poll(pfd, 1, poll_time(hello_wait_time));
 
         if (ret == 0) {
             /* Generic timeout occured */
             time_val poll_diff = poll_timestamp - get_time();
 
             /* Handle hello timeout */
-            remaining_hello_wait_time -= poll_diff;
-            if (remaining_hello_wait_time <= 0) {
+            hello_wait_time -= poll_diff;
+            if (hello_wait_time <= 0) {
                 /* HELLO message wait timeout, send another one */
                 ns_send_HELLO(g_sock, g_sa, g_id);
                 printf("-> HELLO\n");
-
                 peers_cleanup(peers);
-
-                remaining_hello_wait_time = get_time() + NS_HELLO_TIMEOUT;
-                remaining_wait_time = remaining_hello_wait_time;
+                hello_wait_time = get_time() + NS_HELLO_TIMEOUT;
             }
 
             /* Handle election timeout if in election */
             if (g_in_election) {
-                remaining_election_wait_time -= poll_diff;
-                if (remaining_election_wait_time <= 0) {
+                election_wait_time -= poll_diff;
+                if (election_wait_time <= 0) {
                     if (g_wait_for_master) {
                         printf("   Election timeout occured while waiting for MASTER.\n");
-                        remaining_election_wait_time = get_time() + NS_MASTER_TIMEOUT;
+                        start_election();
                     } else {
                         printf("   Election timeout occured while waiting for ELECTION.\n");
-                        remaining_election_wait_time = get_time() + NS_ELECTION_TIMEOUT;
+                        send_master();
                     }
-                    remaining_wait_time = remaining_election_wait_time;
                 }
             }
 
@@ -220,30 +223,48 @@ int main(int argc, char *argv[])
                         }
                         case START_ELECTION: {
                             printf("<- START_ELECTION from '%d'.\n", sender_id);
+                            if (peers.count(sender_id) == 0) {
+                                peers_add(peers, sender_id);
+                                printf("-> GET_NAME to '%d'.\n", sender_id);
+                                ns_send_GET_NAME(g_sock, g_sa, g_id, psa, sender_id);
+                            }
                             g_in_election = 1;
 
                             if (sender_id < g_id) {
                                 printf("-> ELECTION\n");
                                 g_wait_for_master = 0;
                                 ns_send_ELECTION(g_sock, g_sa, g_id);
-                                remaining_election_wait_time = get_time() + NS_ELECTION_TIMEOUT;
+                                election_wait_time = get_time() + NS_ELECTION_TIMEOUT;
                             } else {
                                 g_wait_for_master = 1;
-                                remaining_election_wait_time = get_time() + NS_MASTER_TIMEOUT;
+                                election_wait_time = get_time() + NS_MASTER_TIMEOUT;
                             }
                             break;
                         }
                         case ELECTION: {
                             printf("<- ELECTION from '%d'.\n", sender_id);
-                            //TODO:
+                            if (peers.count(sender_id) == 0) {
+                                peers_add(peers, sender_id);
+                                printf("-> GET_NAME to '%d'.\n", sender_id);
+                                ns_send_GET_NAME(g_sock, g_sa, g_id, psa, sender_id);
+                            }
                             if (!g_in_election) {
                                 printf("   Not in an election, start a new one!\n");
                                 start_election();
+                            } else {
+                                if (sender_id > g_id) {
+
+                                }
                             }
                             break;
                         }
                         case MASTER: {
                             printf("<- MASTER from '%d'.\n", sender_id);
+                            if (peers.count(sender_id) == 0) {
+                                peers_add(peers, sender_id);
+                                printf("-> GET_NAME to '%d'.\n", sender_id);
+                                ns_send_GET_NAME(g_sock, g_sa, g_id, psa, sender_id);
+                            }
                             if (sender_id < g_id) {
                                 start_election();
                             } else {
