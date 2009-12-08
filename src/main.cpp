@@ -20,6 +20,7 @@ static int g_sock;
 static struct sockaddr_in g_sa;
 
 static unsigned short g_master_id;
+static unsigned short g_max_election_id;
 static int g_in_election = 0;
 static int g_wait_for_master = 0;
 
@@ -218,10 +219,9 @@ int main(int argc, char *argv[])
                             break;
                         }
                         case START_ELECTION: {
-                            /* Set state */
+                            printf("<- START_ELECTION from '%d'.\n", sender_id);
                             g_in_election = 1;
 
-                            printf("<- START_ELECTION from '%d'.\n", sender_id);
                             if (sender_id < g_id) {
                                 printf("-> ELECTION\n");
                                 g_wait_for_master = 0;
@@ -243,12 +243,14 @@ int main(int argc, char *argv[])
                             break;
                         }
                         case MASTER: {
-                            /* Set state */
-                            g_in_election = 0;
-                            g_wait_for_master = 0;
-
-                            g_master_id = sender_id;
                             printf("<- MASTER from '%d'.\n", sender_id);
+                            if (sender_id < g_id) {
+                                start_election();
+                            } else {
+                                g_in_election = 0;
+                                g_wait_for_master = 0;
+                                g_master_id = sender_id;
+                            }
                             break;
                         }
                     }
