@@ -86,46 +86,60 @@ int main(int argc, char *argv[])
     pfd[0].events = POLLIN;
 
     /* Set the the various wait timeouts for different events */
-    time_val hello_wait_time = get_time() + NS_HELLO_TIMEOUT;
-    time_val election_wait_time = 0;
-    int election_active = 0;
-    time_val master_wait_time = 0;
+    time_val remaining_hello_wait_time = get_time() + NS_HELLO_TIMEOUT;
+    time_val remaining_election_wait_time = 0;
+    time_val remaining_wait_time = remaining_hello_wait_time;
+
+    /* Simple state tracking (whish: state machine) */
+    int in_election = 0;
+    int wait_for_master = 0;
 
     /* Send the first HELLO message to notify others of a new peer */
     ns_send_HELLO(sock, sa, g_id);
     printf("-> HELLO\n");
 
     while (1) {
-        //printf("   Next HELLO wait time: '%lld'\n", hello_wait_time);
-        int ret = poll(pfd, 1, poll_time(hello_wait_time));
+        //printf("   Next HELLO wait time: '%lld'\n", remaining_hello_wait_time);
+        time_val poll_timestamp = get_time();
+        int ret = poll(pfd, 1, poll_time(remaining_wait_time));
 
         if (ret == 0) {
-            /* HELLO message wait time out, send another one */
-            ns_send_HELLO(sock, sa, g_id);
-            printf("-> HELLO\n");
+            /* Generic timeout occured */
+            time_val poll_diff = poll_timestamp - get_time();
 
-            peers_cleanup(peers);
+            /* Handle hello timeout */
+            remaining_hello_wait_time -= poll_diff;
+            if (remaining_hello_wait_time <= 0) {
+                /* HELLO message wait timeout, send another one */
+                ns_send_HELLO(sock, sa, g_id);
+                printf("-> HELLO\n");
 
-            hello_wait_time = get_time() + NS_HELLO_TIMEOUT;
+                peers_cleanup(peers);
+
+                remaining_hello_wait_time = get_time() + NS_HELLO_TIMEOUT;
+                remaining_wait_time = remaining_hello_wait_time;
+            }
+
+            /* Handle election timeout if in election */
+            if (in_election) {
+                remaining_election_wait_time -= poll_diff;
+                if (remaining_election_wait_time <= 0) {
+                    printf("   Election timeout occured!\n");
+                    // TODO: React on this
+                }
+                remaining_wait_time = remaining_election_wait_time;
+            }
+
         } else if (ret > 0) {
             /* An event happend on one of the poll'ed file desciptors */
             if (pfd[0].revents & POLLIN) {
                 struct sockaddr_in psa; socklen_t csalen = sizeof(struct sockaddr_in);
+                ns_packet_t pack;
 
-                /* This loop might be necessary as it is not guaranteed to receive the
-                   whole package with one call to recvfrom() */
-                int byte_read = 0;
-                char buf[64];
-                while (byte_read < sizeof(ns_packet_t)) {
-                    byte_read += recvfrom(sock, buf, 64, 0, (struct sockaddr *)&psa, &csalen);
-                }
-
-                if (byte_read > sizeof(ns_packet_t)) {
+                if (recvfrom(sock, &pack, sizeof(ns_packet_t), 0, (struct sockaddr *)&psa, &csalen) == -1) {
                     fprintf(stderr, "Error: Unable to read datagram!\n");
                     perror("recvfrom");
                 } else {
-                    ns_packet_t pack;
-                    memcpy(&pack, buf, sizeof(ns_packet_t));
                     unsigned short sender_id = ntohs(pack.sender_id);
                     switch (ntohs(pack.type)) {
                         case HELLO: {
@@ -183,15 +197,19 @@ int main(int argc, char *argv[])
                             break;
                         }
                         case START_ELECTION: {
+                            /* Set state */
+                            in_election = 1;
+                            wait_for_master = 0;
+
                             printf("<- START_ELECTION from '%d'.\n", sender_id);
                             if (sender_id > g_id) {
                                 printf("-> ELECTION\n");
                                 ns_send_ELECTION(sock, sa, g_id);
-                                election_wait_time = get_time() + NS_ELECTION_TIMEOUT;
+                                remaining_election_wait_time = get_time() + NS_ELECTION_TIMEOUT;
+                            } else {
+                                //TODO:
+                                remaining_election_wait_time = get_time() + NS_MASTER_TIMEOUT;
                             }
-                            //TODO:
-                            election_active = 1;
-                            master_wait_time = get_time() + NS_MASTER_TIMEOUT;
                             break;
                         }
                         case ELECTION: {
@@ -200,9 +218,11 @@ int main(int argc, char *argv[])
                             break;
                         }
                         case MASTER: {
+                            /* Set state */
+                            in_election = 0;
+
                             printf("<- MASTER from '%d'.\n", sender_id);
                             //TODO:
-                            election_active = 0;
                             break;
                         }
                     }
