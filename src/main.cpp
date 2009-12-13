@@ -85,7 +85,7 @@ static void peers_add(std::map<unsigned short, ns_peer_t> &peers, unsigned short
     strncpy(info.name, "", strlen(""));
     info.last_hello = get_time();
     peers[id] = info;
-    printf("   Added new peer '%d' with name '%s'\n", id, info.name);
+    //printf("   Added new peer '%d' with name '%s'\n", id, info.name);
 }
 
 static void peers_cleanup(std::map<unsigned short, ns_peer_t> &peers)
@@ -145,10 +145,10 @@ int main(int argc, char *argv[])
             if (g_in_election) {
                 hello_wait_time -= poll_diff;
                 if (g_wait_for_master) {
-                    printf("   Election timeout while waiting for MASTER.\n");
+                    //printf("   Election timeout while waiting for MASTER.\n");
                     start_election();
                 } else {
-                    printf("   Election timeout while waiting for ELECTION.\n");
+                    //printf("   Election timeout while waiting for ELECTION.\n");
                     send_master();
                 }
                 //printf("   Next election wait time: '%lld'.\n", election_wait_time);
@@ -182,7 +182,7 @@ int main(int argc, char *argv[])
                                     ns_send_GET_NAME(g_sock, g_sa, g_id, psa, sender_id);
                                 } else {
                                     peers[sender_id].last_hello = get_time();
-                                    printf("   Updated last HELLO timestamp for peer.\n");
+                                    //printf("   Updated last HELLO timestamp for peer.\n");
                                 }
                             }
                             break;
@@ -223,7 +223,7 @@ int main(int argc, char *argv[])
                                     peers_add(peers, sender_id);
                                 }
                                 strncpy(peers[sender_id].name, pack.payload.name, strlen(pack.payload.name));
-                                printf("   Updated peer '%d' with name '%s'\n", sender_id, peers[sender_id].name);
+                                //printf("   Updated peer '%d' with name '%s'\n", sender_id, peers[sender_id].name);
                             }
                             break;
                         }
@@ -263,7 +263,7 @@ int main(int argc, char *argv[])
                                 } else {
                                     if (sender_id > g_id) {
                                         g_wait_for_master = 1;
-                                        printf("   Someone voted higher, wait for MASTER.\n");
+                                        //printf("   Someone voted higher, wait for MASTER.\n");
                                     }
                                 }
                             }
