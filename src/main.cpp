@@ -120,43 +120,44 @@ int main(int argc, char *argv[])
     /* Set the the various wait timeouts for different events.
        Note that the first time out is actually an NS_ELECTION_TIMEOUT
        because we initially send an START_ELECTION packet. */
-    time_val hello_wait_time = get_time() + NS_ELECTION_TIMEOUT;
+    time_val hello_wait_time = get_time() + NS_HELLO_TIMEOUT;
     time_val election_wait_time = 0;
 
     ///* Send the first HELLO message to notify others of a new peer */
-    //send_hello();
+    send_hello();
     /* Send the first START_ELECTION message to notify others of a new peer */
     start_election();
 
     while (1) {
         time_val poll_timestamp = get_time();
-        int ret = poll(pfd, 1, poll_time(hello_wait_time));
+        int ret;
+        if (g_in_election) {
+            ret = poll(pfd, 1, poll_time(election_wait_time));
+        } else {
+            ret = poll(pfd, 1, poll_time(hello_wait_time));
+        }
 
         if (ret == 0) {
             /* Generic timeout occured */
             time_val poll_diff = get_time() - poll_timestamp;
 
-            /* Handle hello timeout */
-            hello_wait_time -= poll_diff;
+            /* Handle election timeout if in election */
+            if (g_in_election) {
+                hello_wait_time -= poll_diff;
+                if (g_wait_for_master) {
+                    printf("   Election timeout while waiting for MASTER.\n");
+                    start_election();
+                } else {
+                    printf("   Election timeout while waiting for ELECTION.\n");
+                    send_master();
+                }
+                //printf("   Next election wait time: '%lld'.\n", election_wait_time);
+            } else {
                 /* HELLO message wait timeout, send another one */
                 send_hello();
                 peers_cleanup(peers);
                 hello_wait_time = get_time() + NS_HELLO_TIMEOUT;
-                printf("   Next hello wait time: '%lld'\n", hello_wait_time);
-
-            /* Handle election timeout if in election */
-            if (g_in_election) {
-                election_wait_time -= poll_diff;
-                if (election_wait_time <= 0) {
-                    if (g_wait_for_master) {
-                        printf("   Election timeout while waiting for MASTER.\n");
-                        start_election();
-                    } else {
-                        printf("   Election timeout while waiting for ELECTION.\n");
-                        send_master();
-                    }
-                }
-                //printf("   Next election wait time: '%lld'.\n", election_wait_time);
+                //printf("   Next hello wait time: '%lld'\n", hello_wait_time);
             }
             //printf("   Timeout occured, hello: '%lld' and election: '%lld'\n", hello_wait_time, election_wait_time);
 
@@ -259,11 +260,10 @@ int main(int argc, char *argv[])
                                 if (!g_in_election) {
                                     printf("   Not in an election, start a new one!\n");
                                     start_election();
-                                    //election_wait_time = get_time() + NS_ELECTION_TIMEOUT;
                                 } else {
                                     if (sender_id > g_id) {
                                         g_wait_for_master = 1;
-                                        //election_wait_time = get_time() + NS_MASTER_TIMEOUT;
+                                        printf("   Someone voted higher, wait for MASTER.\n");
                                     }
                                 }
                             }
@@ -278,9 +278,8 @@ int main(int argc, char *argv[])
                                     ns_send_GET_NAME(g_sock, g_sa, g_id, psa, sender_id);
                                 }
                             }
-                            if (sender_id < g_id) {
+                            if (!g_in_election || sender_id < g_id) {
                                 start_election();
-                                //election_wait_time = get_time() + NS_ELECTION_TIMEOUT;
                             } else {
                                 g_in_election = 0;
                                 g_wait_for_master = 0;
