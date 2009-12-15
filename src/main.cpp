@@ -60,6 +60,7 @@ static void parse_cmdline_args(int argc, char *argv[])
 static void start_election()
 {
     g_in_election = 1;
+    g_wait_again = 1;
     g_wait_for_master = 0;
     ns_send_START_ELECTION(g_sock, g_sa, g_id);
     printf("-> START_ELECTION\n");
@@ -117,16 +118,16 @@ int main(int argc, char *argv[])
     pfd[0].fd = g_sock;
     pfd[0].events = POLLIN;
 
+    /* Send the first HELLO message to notify others of a new peer */
+    send_hello();
+    /* Send the first START_ELECTION message to notify others of a new peer */
+    start_election();
+
     /* Set the the various wait timeouts for different events.
        Note that the first time out is actually an NS_ELECTION_TIMEOUT
        because we initially send an START_ELECTION packet. */
     time_val hello_wait_time = get_time() + NS_HELLO_TIMEOUT;
-    time_val election_wait_time = 0;
-
-    ///* Send the first HELLO message to notify others of a new peer */
-    send_hello();
-    /* Send the first START_ELECTION message to notify others of a new peer */
-    start_election();
+    time_val election_wait_time = get_time() + NS_ELECTION_TIMEOUT;
 
     while (1) {
         time_val poll_timestamp = get_time();
@@ -145,11 +146,16 @@ int main(int argc, char *argv[])
             if (g_in_election) {
                 hello_wait_time -= poll_diff;
                 if (g_wait_for_master) {
-                    //printf("   Election timeout while waiting for MASTER.\n");
+                    printf("   Election timeout while waiting for MASTER.\n");
                     start_election();
                 } else {
-                    //printf("   Election timeout while waiting for ELECTION.\n");
-                    send_master();
+                    if (g_wait_again) {
+                        g_wait_again = 0;
+                        time_val election_wait_time = get_time() + NS_ELECTION_TIMEOUT;
+                    } else {
+                        printf("   Election timeout while waiting for ELECTION.\n");
+                        send_master();
+                    }
                 }
                 //printf("   Next election wait time: '%lld'.\n", election_wait_time);
             } else {
@@ -228,7 +234,7 @@ int main(int argc, char *argv[])
                             break;
                         }
                         case START_ELECTION: {
-                            printf("<- START_ELECTION from '%d'.\n", sender_id);
+                            printf("<- START_ELECTION from '%d' (%lld).\n", sender_id, get_time());
                             if (sender_id != g_id) {
                                 if (peers.count(sender_id) == 0) {
                                     peers_add(peers, sender_id);
@@ -238,7 +244,7 @@ int main(int argc, char *argv[])
                                 g_in_election = 1;
 
                                 if (sender_id < g_id) {
-                                    printf("-> ELECTION\n");
+                                    printf("-> ELECTION (%lld)\n", get_time());
                                     g_wait_for_master = 0;
                                     ns_send_ELECTION(g_sock, g_sa, g_id);
                                     election_wait_time = get_time() + NS_ELECTION_TIMEOUT;
@@ -250,7 +256,7 @@ int main(int argc, char *argv[])
                             break;
                         }
                         case ELECTION: {
-                            printf("<- ELECTION from '%d'.\n", sender_id);
+                            printf("<- ELECTION from '%d' (%lld).\n", sender_id, get_time());
                             if (sender_id != g_id) {
                                 if (peers.count(sender_id) == 0) {
                                     peers_add(peers, sender_id);
@@ -261,6 +267,7 @@ int main(int argc, char *argv[])
                                     printf("   Not in an election, start a new one!\n");
                                     start_election();
                                 } else {
+                                    g_wait_again = 0;
                                     if (sender_id > g_id) {
                                         g_wait_for_master = 1;
                                         //printf("   Someone voted higher, wait for MASTER.\n");
@@ -270,7 +277,7 @@ int main(int argc, char *argv[])
                             break;
                         }
                         case MASTER: {
-                            printf("<- MASTER from '%d'.\n", sender_id);
+                            printf("<- MASTER from '%d' (%lld).\n", sender_id, get_time());
                             if (sender_id != g_id) {
                                 if (peers.count(sender_id) == 0) {
                                     peers_add(peers, sender_id);
@@ -282,6 +289,7 @@ int main(int argc, char *argv[])
                                 start_election();
                             } else {
                                 g_in_election = 0;
+                                g_wait_again = 0;
                                 g_wait_for_master = 0;
                                 g_master_id = sender_id;
                             }
