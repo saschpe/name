@@ -146,7 +146,7 @@ int main(int argc, char *argv[])
             if (g_in_election) {
                 hello_wait_time -= poll_diff;
                 if (g_wait_for_master) {
-                    printf("   Election timeout while waiting for MASTER.\n");
+                    //printf("   Election timeout while waiting for MASTER.\n");
                     if (peers.size() == 0) {
                         send_master();  // Special case, no one is here
                     } else {
@@ -157,7 +157,7 @@ int main(int argc, char *argv[])
                         g_wait_again = 0;
                         time_val election_wait_time = get_time() + NS_ELECTION_TIMEOUT;
                     } else {
-                        printf("   Election timeout while waiting for ELECTION.\n");
+                        //printf("   Election timeout while waiting for ELECTION.\n");
                         send_master();
                     }
                 }
@@ -278,7 +278,7 @@ int main(int argc, char *argv[])
                                     if (sender_id > g_id) {
                                         g_wait_for_master = 1;
                                         election_wait_time = get_time() + NS_MASTER_TIMEOUT;
-                                        printf("   Someone voted higher, wait for MASTER.\n");
+                                        //printf("   Someone voted higher, wait for MASTER.\n");
                                     }
                                 }
                             }
