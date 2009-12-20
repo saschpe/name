@@ -147,6 +147,7 @@ int main(int argc, char *argv[])
                 hello_wait_time -= poll_diff;
                 if (g_wait_for_master) {
                     printf("   Election timeout while waiting for MASTER.\n");
+                        //TODO: here'!
                     start_election();
                 } else {
                     if (g_wait_again) {
@@ -242,16 +243,16 @@ int main(int argc, char *argv[])
                                     ns_send_GET_NAME(g_sock, g_sa, g_id, psa, sender_id);
                                 }
                                 g_in_election = 1;
+                            }
 
-                                if (sender_id < g_id) {
-                                    printf("-> ELECTION (%lld)\n", get_time());
-                                    g_wait_for_master = 0;
-                                    ns_send_ELECTION(g_sock, g_sa, g_id);
-                                    election_wait_time = get_time() + NS_ELECTION_TIMEOUT;
-                                } else {
-                                    g_wait_for_master = 1;
-                                    election_wait_time = get_time() + NS_MASTER_TIMEOUT;
-                                }
+                            if (sender_id < g_id) {
+                                printf("-> ELECTION (%lld)\n", get_time());
+                                g_wait_for_master = 0;
+                                ns_send_ELECTION(g_sock, g_sa, g_id);
+                                election_wait_time = get_time() + NS_ELECTION_TIMEOUT;
+                            } else {
+                                g_wait_for_master = 1;
+                                election_wait_time = get_time() + NS_MASTER_TIMEOUT;
                             }
                             break;
                         }
@@ -270,7 +271,8 @@ int main(int argc, char *argv[])
                                     g_wait_again = 0;
                                     if (sender_id > g_id) {
                                         g_wait_for_master = 1;
-                                        //printf("   Someone voted higher, wait for MASTER.\n");
+                                        election_wait_time = get_time() + NS_MASTER_TIMEOUT;
+                                        printf("   Someone voted higher, wait for MASTER.\n");
                                     }
                                 }
                             }
