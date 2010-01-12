@@ -22,6 +22,8 @@ static struct sockaddr_in g_sa;
 static unsigned short g_master_id;
 static unsigned short g_max_election_id;
 static int g_in_election = 0;
+static int g_in_sync = 0;
+static time_val g_master_sync_time = 0;
 static int g_wait_for_master = 0;
 static int g_wait_again = 0;
 
@@ -60,6 +62,7 @@ static void parse_cmdline_args(int argc, char *argv[])
 static void start_election()
 {
     g_in_election = 1;
+    g_in_sync = 0;
     g_wait_again = 1;
     g_wait_for_master = 0;
     ns_send_START_ELECTION(g_sock, g_sa, g_id);
@@ -300,6 +303,32 @@ int main(int argc, char *argv[])
                                 g_wait_again = 0;
                                 g_wait_for_master = 0;
                                 g_master_id = sender_id;
+                            }
+                            break;
+                        }
+                        case START_SYNC: {
+                            printf("<- START_SYNC from '%d' (%lld).\n", sender_id, get_time());
+                            if (sender_id != g_master_id) {
+                                /* Obviously the wrong peer send the START_SYNC package. */
+                                start_election();
+                            } else {
+                                /* Only respond here if I'm not the master and this package was not sent by me. */
+                                if (g_master_id != g_id) {
+                                    g_in_sync = 1;
+                                    printf("-> SYNC to '%d'.\n", sender_id);
+                                    ns_send_SYNC(g_sock, g_sa, g_id, get_time(), psa);
+                                }
+                            }
+                            break;
+                        }
+                        case SYNC: {
+                            printf("<- SYNC from '%d' (%lld).\n", sender_id, get_time());
+                            if (g_master_id == g_id) {  /* If I'm the master */
+                                // TODO: Add this timestamp to all received timestamps
+                            } else { /* I'm a slave */
+                                time_val time_sync_diff = net2time(pack.payload.time) - get_time();
+                                adjust_time(time_sync_diff);
+                                g_in_sync = 0;
                             }
                             break;
                         }
