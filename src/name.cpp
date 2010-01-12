@@ -1,4 +1,5 @@
 #include "name.h"
+#include "clock.h"
 
 #include <stdio.h>
 #include <stdlib.h>
@@ -99,6 +100,7 @@ void ns_send_NAME_ID(int sock, struct sockaddr_in sa, unsigned short id, const c
         perror("sendto");
     }
 }
+
 /**
  * Broadcast a START_ELECTION packet.
  */
@@ -145,6 +147,42 @@ void ns_send_MASTER(int sock, struct sockaddr_in sa, unsigned short id)
     pack.sender_id = htons(id);
     pack.type = htons(MASTER);
     /* inet_addr("127.0.0.1"); */
+    if (sendto(sock, (void *)&pack, sizeof(pack), 0, (struct sockaddr *)&sa, sizeof(sa)) < 0) {
+        perror("sendto"); exit(6);
+    }
+}
+
+/**
+ * Broadcast a START_ELECTION packet.
+ */
+void ns_send_START_SYNC(int sock, struct sockaddr_in sa, unsigned short id)
+{
+    struct ns_packet pack;
+
+    sa.sin_addr.s_addr = htonl(INADDR_BROADCAST);
+    memset(&pack, 0, sizeof(pack));
+    pack.sender_id = htons(id);
+    pack.type = htons(START_SYNC);
+    /* inet_addr("127.0.0.1"); */
+    if (sendto(sock, (void *)&pack, sizeof(pack), 0, (struct sockaddr *)&sa, sizeof(sa)) < 0) {
+        perror("sendto"); exit(6);
+    }
+
+}
+
+/**
+ * Send a SYNC package to a peer.
+ */
+void ns_send_SYNC(int sock, struct sockaddr_in sa, unsigned short id, time_val ts, struct sockaddr_in psa)
+{
+    struct ns_packet pack;
+
+    sa.sin_addr.s_addr = htonl(INADDR_BROADCAST);
+    memset(&pack, 0, sizeof(pack));
+    pack.sender_id = htons(id);
+    pack.type = htons(SYNC);
+    time2net(ts, pack.payload.time);
+    sa.sin_addr.s_addr = psa.sin_addr.s_addr;
     if (sendto(sock, (void *)&pack, sizeof(pack), 0, (struct sockaddr *)&sa, sizeof(sa)) < 0) {
         perror("sendto"); exit(6);
     }

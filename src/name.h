@@ -14,6 +14,7 @@
 #define NS_HELLO_LAST_TIME_DIFFERENCE (NS_HELLO_TIMEOUT * 3)
 #define NS_ELECTION_TIMEOUT (300 * 1000)
 #define NS_MASTER_TIMEOUT (600 * 1000)
+#define NS_TIME_SYNC_TIMEOUT (300 * 1000)
 
 /**
 * Defines the possible packet types.
@@ -25,7 +26,9 @@ typedef enum ns_packet_type {
     NAME_ID = 4,
     START_ELECTION = 5,
     ELECTION = 6,
-    MASTER = 7
+    MASTER = 7,
+    START_SYNC = 8,
+    SYNC = 9
 } ns_packet_type_t;
 
 /**
@@ -37,6 +40,7 @@ typedef struct ns_packet {
     union {
         unsigned short id;
         char name[12];
+        char time[8];
     } payload;
 } __attribute((packed)) ns_packet_t;
 
@@ -52,12 +56,15 @@ typedef struct ns_peer
 void ns_init(int *sock, struct sockaddr_in *sa, int port);
 
 void ns_send_HELLO(int sock, struct sockaddr_in sa, unsigned short id);
-void ns_send_GET_ID(int sock, struct sockaddr_in sa, unsigned short id, struct sockaddr_in csa, unsigned short cid);
-void ns_send_GET_NAME(int sock, struct sockaddr_in sa, unsigned short id, struct sockaddr_in csa, unsigned short cid);
-void ns_send_NAME_ID(int sock, struct sockaddr_in sa, unsigned short id, const char *name, struct sockaddr_in csa);
+void ns_send_GET_ID(int sock, struct sockaddr_in sa, unsigned short id, struct sockaddr_in psa, unsigned short cid);
+void ns_send_GET_NAME(int sock, struct sockaddr_in sa, unsigned short id, struct sockaddr_in psa, unsigned short cid);
+void ns_send_NAME_ID(int sock, struct sockaddr_in sa, unsigned short id, const char *name, struct sockaddr_in psa);
 
 void ns_send_START_ELECTION(int sock, struct sockaddr_in sa, unsigned short id);
 void ns_send_ELECTION(int sock, struct sockaddr_in sa, unsigned short id);
 void ns_send_MASTER(int sock, struct sockaddr_in sa, unsigned short id);
+
+void ns_send_START_SYNC(int sock, struct sockaddr_in sa, unsigned short id);
+void ns_send_SYNC(int sock, struct sockaddr_in sa, unsigned short id, time_val ts, struct sockaddr_in psa);
 
 #endif
