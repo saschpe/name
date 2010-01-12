@@ -2,6 +2,7 @@
 #include "name.h"
 
 #include <map>
+#include <vector>
 
 #include <arpa/inet.h>
 #include <limits.h>
@@ -22,7 +23,7 @@ static struct sockaddr_in g_sa;
 static unsigned short g_master_id;
 static unsigned short g_max_election_id;
 static int g_in_election = 0;
-static int g_in_sync = 0;
+static int g_master_in_sync = 0;
 static time_val g_master_sync_time = 0;
 static int g_wait_for_master = 0;
 static int g_wait_again = 0;
@@ -62,7 +63,7 @@ static void parse_cmdline_args(int argc, char *argv[])
 static void start_election()
 {
     g_in_election = 1;
-    g_in_sync = 0;
+    g_master_in_sync = 0;
     g_wait_again = 1;
     g_wait_for_master = 0;
     ns_send_START_ELECTION(g_sock, g_sa, g_id);
@@ -111,6 +112,7 @@ int main(int argc, char *argv[])
     g_id = getpid();
     g_master_id = g_id;
     std::map<unsigned short, ns_peer_t> peers;
+    std::vector<time_val> master_sync_timestamps;
 
     parse_cmdline_args(argc, argv);
 
@@ -131,6 +133,7 @@ int main(int argc, char *argv[])
        because we initially send an START_ELECTION packet. */
     time_val hello_wait_time = get_time() + NS_HELLO_TIMEOUT;
     time_val election_wait_time = get_time() + NS_ELECTION_TIMEOUT;
+    time_val sync_time_wait_time;
 
     while (1) {
         time_val poll_timestamp = get_time();
@@ -173,6 +176,29 @@ int main(int argc, char *argv[])
                 //printf("   Next hello wait time: '%lld'\n", hello_wait_time);
             }
             //printf("   Timeout occured, hello: '%lld' and election: '%lld'\n", hello_wait_time, election_wait_time);
+
+            /* If master then check for time sync stuff. */
+            if (g_master_id == g_id) {
+                if (!g_master_in_sync) {
+                    g_master_in_sync = 1;
+                    master_sync_timestamps.clear();
+                    master_sync_timestamps.push_back(get_time());
+                    ns_send_START_SYNC(g_sock, g_sa, g_id);
+                    sync_time_wait_time = get_time() + NS_TIME_SYNC_TIMEOUT;
+                } else {
+                    /* Handle if we are in time sync state */
+                    sync_time_wait_time -= poll_diff;
+                    if (sync_time_wait_time < 0) {
+                        time_val sum = 0;
+                        for (std::vector<time_val>::iterator it = master_sync_timestamps.begin(); it != master_sync_timestamps.end(); it++) {
+                            sum += *it;
+                        }
+                        time_val new_time = sum / master_sync_timestamps.size();
+                        ns_send_SYNC(g_sock, g_sa, g_id, new_time);
+                        g_master_in_sync = 0;
+                    }
+                }
+            }
 
         } else if (ret > 0) {
             /* An event happend on one of the poll'ed file desciptors */
@@ -312,9 +338,8 @@ int main(int argc, char *argv[])
                                 /* Obviously the wrong peer send the START_SYNC package. */
                                 start_election();
                             } else {
-                                /* Only respond here if I'm not the master and this package was not sent by me. */
+                                /* Only respond here if I'm not the master and thus this package was not sent by me. */
                                 if (g_master_id != g_id) {
-                                    g_in_sync = 1;
                                     printf("-> SYNC to '%d'.\n", sender_id);
                                     ns_send_SYNC(g_sock, g_sa, g_id, get_time(), psa);
                                 }
@@ -324,11 +349,12 @@ int main(int argc, char *argv[])
                         case SYNC: {
                             printf("<- SYNC from '%d' (%lld).\n", sender_id, get_time());
                             if (g_master_id == g_id) {  /* If I'm the master */
-                                // TODO: Add this timestamp to all received timestamps
+                                /* Add this timestamp to received sync timestamps */
+                                master_sync_timestamps.push_back(net2time(pack.payload.time));
                             } else { /* I'm a slave */
                                 time_val time_sync_diff = net2time(pack.payload.time) - get_time();
                                 adjust_time(time_sync_diff);
-                                g_in_sync = 0;
+                                printf("Adjusted time by diff '%lld'\n", time_sync_diff);
                             }
                             break;
                         }
