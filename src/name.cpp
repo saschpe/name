@@ -171,7 +171,25 @@ void ns_send_START_SYNC(int sock, struct sockaddr_in sa, unsigned short id)
 }
 
 /**
- * Send a SYNC package to a peer.
+ * Broadcast a SYNC package to a peer.
+ */
+void ns_send_SYNC(int sock, struct sockaddr_in sa, unsigned short id, time_val ts)
+{
+    struct ns_packet pack;
+
+    sa.sin_addr.s_addr = htonl(INADDR_BROADCAST);
+    memset(&pack, 0, sizeof(pack));
+    pack.sender_id = htons(id);
+    pack.type = htons(SYNC);
+    time2net(ts, pack.payload.time);
+    /* inet_addr("127.0.0.1"); */
+    if (sendto(sock, (void *)&pack, sizeof(pack), 0, (struct sockaddr *)&sa, sizeof(sa)) < 0) {
+        perror("sendto"); exit(6);
+    }
+}
+
+/**
+ * Send a SYNC package to a specific peer.
  */
 void ns_send_SYNC(int sock, struct sockaddr_in sa, unsigned short id, time_val ts, struct sockaddr_in psa)
 {

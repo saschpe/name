@@ -65,6 +65,7 @@ void ns_send_ELECTION(int sock, struct sockaddr_in sa, unsigned short id);
 void ns_send_MASTER(int sock, struct sockaddr_in sa, unsigned short id);
 
 void ns_send_START_SYNC(int sock, struct sockaddr_in sa, unsigned short id);
+void ns_send_SYNC(int sock, struct sockaddr_in sa, unsigned short id, time_val ts);
 void ns_send_SYNC(int sock, struct sockaddr_in sa, unsigned short id, time_val ts, struct sockaddr_in psa);
 
 #endif
