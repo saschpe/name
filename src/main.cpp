@@ -183,6 +183,7 @@ int main(int argc, char *argv[])
                     g_master_in_sync = 1;
                     master_sync_timestamps.clear();
                     master_sync_timestamps.push_back(get_time());
+                    printf("-> START_SYNC to all.\n");
                     ns_send_START_SYNC(g_sock, g_sa, g_id);
                     sync_time_wait_time = get_time() + NS_TIME_SYNC_TIMEOUT;
                 } else {
@@ -194,6 +195,7 @@ int main(int argc, char *argv[])
                             sum += *it;
                         }
                         time_val new_time = sum / master_sync_timestamps.size();
+                        printf("-> SYNC to all.\n");
                         ns_send_SYNC(g_sock, g_sa, g_id, new_time);
                         g_master_in_sync = 0;
                     }
