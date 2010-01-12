@@ -1,8 +1,6 @@
 #ifndef __CLOCK_H
 #define __CLOCK_H
 
-
-
 /** time_val speichert die Zeit in Mikrosekunden (us) seit dem 1.1.1970 */
 typedef long long time_val;
 
@@ -27,6 +25,11 @@ extern "C" void clock_setup(time_val t_offset, time_val speed_pct);
  */
 extern "C" time_val get_time();
 
+/** @brief Passt die lokale Uhr an
+ *
+ * @param diff Zeitverschiebung in die Zukunft [us]
+ */
+extern "C" void adjust_time(time_val diff);
 
 /** @brief Liefert die Wartezeit für poll() bis zum angegebenen Zeitpunkt
  *
