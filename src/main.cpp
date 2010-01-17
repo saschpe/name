@@ -185,11 +185,12 @@ int main(int argc, char *argv[])
                     master_sync_timestamps.push_back(get_time());
                     printf("-> START_SYNC to all.\n");
                     ns_send_START_SYNC(g_sock, g_sa, g_id);
-                    sync_time_wait_time = get_time() + NS_TIME_SYNC_TIMEOUT;
+                    sync_time_wait_time = NS_TIME_SYNC_TIMEOUT;
                 } else {
                     /* Handle if we are in time sync state */
                     sync_time_wait_time -= poll_diff;
                     if (sync_time_wait_time < 0) {
+                        printf("   Wait time gone, do sth.\n");
                         time_val sum = 0;
                         for (std::vector<time_val>::iterator it = master_sync_timestamps.begin(); it != master_sync_timestamps.end(); it++) {
                             sum += *it;
