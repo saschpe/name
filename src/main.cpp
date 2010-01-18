@@ -140,6 +140,8 @@ int main(int argc, char *argv[])
         int ret;
         if (g_in_election) {
             ret = poll(pfd, 1, poll_time(election_wait_time));
+        } else if (g_master_in_sync) {
+            ret = poll(pfd, 1, poll_time(sync_time_wait_time));
         } else {
             ret = poll(pfd, 1, poll_time(hello_wait_time));
         }
@@ -150,7 +152,6 @@ int main(int argc, char *argv[])
 
             /* Handle election timeout if in election */
             if (g_in_election) {
-                hello_wait_time -= poll_diff;
                 if (g_wait_for_master) {
                     //printf("   Election timeout while waiting for MASTER.\n");
                     if (peers.size() == 0) {
@@ -168,7 +169,10 @@ int main(int argc, char *argv[])
                     }
                 }
                 //printf("   Next election wait time: '%lld'.\n", election_wait_time);
-            } else {
+            }
+
+            hello_wait_time -= poll_diff;
+            if (hello_wait_time < get_time()) {
                 /* HELLO message wait timeout, send another one */
                 send_hello();
                 peers_cleanup(peers);
@@ -183,20 +187,20 @@ int main(int argc, char *argv[])
                     g_master_in_sync = 1;
                     master_sync_timestamps.clear();
                     master_sync_timestamps.push_back(get_time());
-                    printf("-> START_SYNC to all.\n");
+                    printf("-> START_SYNC.\n");
                     ns_send_START_SYNC(g_sock, g_sa, g_id);
-                    sync_time_wait_time = NS_TIME_SYNC_TIMEOUT;
+                    sync_time_wait_time = get_time() + NS_TIME_SYNC_TIMEOUT;
                 } else {
                     /* Handle if we are in time sync state */
                     sync_time_wait_time -= poll_diff;
-                    if (sync_time_wait_time < 0) {
-                        printf("   Wait time gone, do sth.\n");
+                    if (sync_time_wait_time < get_time()) {
+                        //printf("   Wait time gone, do sth.\n");
                         time_val sum = 0;
                         for (std::vector<time_val>::iterator it = master_sync_timestamps.begin(); it != master_sync_timestamps.end(); it++) {
                             sum += *it;
                         }
                         time_val new_time = sum / master_sync_timestamps.size();
-                        printf("-> SYNC to all.\n");
+                        printf("-> SYNC (master).\n");
                         ns_send_SYNC(g_sock, g_sa, g_id, new_time);
                         g_master_in_sync = 0;
                     }
