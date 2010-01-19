@@ -182,7 +182,7 @@ int main(int argc, char *argv[])
             //printf("   Timeout occured, hello: '%lld' and election: '%lld'\n", hello_wait_time, election_wait_time);
 
             /* If master then check for time sync stuff. */
-            if (g_master_id == g_id) {
+            if (g_master_id == g_id && !g_in_election) {
                 if (!g_master_in_sync) {
                     g_master_in_sync = 1;
                     master_sync_timestamps.clear();
