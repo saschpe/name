@@ -284,6 +284,11 @@ int main(int argc, char *argv[])
                                 g_in_election = 1;
                             }
 
+                            if (g_master_in_sync) {
+                                printf("   Time sync was interrupted by START_SYNC...\n");
+                                g_master_in_sync = 0;
+                            }
+
                             if (sender_id < g_id) {
                                 printf("-> ELECTION (%lld)\n", get_time());
                                 g_wait_for_master = 0;
