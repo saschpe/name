@@ -8,6 +8,7 @@
 #include <limits.h>
 #include <netinet/in.h>
 #include <poll.h>
+#include <stdarg.h>
 #include <stdio.h>
 #include <stdlib.h>
 #include <string.h>
@@ -56,6 +57,16 @@ static void parse_cmdline_args(int argc, char *argv[])
         print_usage(argv[0]);
         exit(1);
     }
+}
+
+void debug_print(const char *format, ...)
+{
+    va_list ap;
+    va_start(ap, format);
+    //va_copy(aq, ap);
+    //printf("%d.5 %s %s %d.5 %s ", g_id, time, sender_ip, sender_id, sender_name);
+    va_end(ap);
+    vprintf(format, ap);
 }
 
 /**
