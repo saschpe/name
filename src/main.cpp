@@ -59,12 +59,18 @@ static void parse_cmdline_args(int argc, char *argv[])
     }
 }
 
-void debug_print(const char *format, ...)
+void print(const char *format, ...)
 {
     va_list ap;
     va_start(ap, format);
-    //va_copy(aq, ap);
     //printf("%d.5 %s %s %d.5 %s ", g_id, time, sender_ip, sender_id, sender_name);
+    time_val now = get_time();
+    int hours = now / 1000 / 1000 / 60 / 60 / 24;
+    int mins = now;
+    int secs = 0;
+    int msecs = 0;
+
+    printf("%d %2d:%2d:%2d.%3d ", g_id, hours, mins, secs, msecs);
     va_end(ap);
     vprintf(format, ap);
 }
@@ -79,20 +85,20 @@ static void start_election()
     g_wait_again = 1;
     g_wait_for_master = 0;
     ns_send_START_ELECTION(g_sock, g_sa, g_id);
-    printf("-> START_ELECTION\n");
+    print("-> START_ELECTION\n");
 }
 
 static void send_master()
 {
     g_wait_for_master = 0;
     ns_send_MASTER(g_sock, g_sa, g_id);
-    printf("-> MASTER\n");
+    print("-> MASTER\n");
 }
 
 static void send_hello()
 {
     ns_send_HELLO(g_sock, g_sa, g_id);
-    printf("-> HELLO\n");
+    print("-> HELLO\n");
 }
 
 static void peers_add(std::map<unsigned short, ns_peer_t> &peers, unsigned short id)
