@@ -361,6 +361,8 @@ int main(int argc, char *argv[])
                             } else { /* I'm a slave */
                                 time_val time_sync_diff = net2time(pack.payload.time) - get_time();
                                 adjust_time(time_sync_diff);
+                                hello_wait_time -= time_sync_diff;
+                                //election_wait_time -= time_sync_diff;
                                 //printf("   Adjusted time by diff '%lld'\n", time_sync_diff);
                             }
                             break;
