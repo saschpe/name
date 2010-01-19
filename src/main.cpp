@@ -25,6 +25,7 @@ static unsigned short g_max_election_id;
 static int g_in_election = 0;
 static int g_master_in_sync = 0;
 static time_val g_master_sync_time = 0;
+static time_val g_client_sync_time = 0;
 static int g_wait_for_master = 0;
 static int g_wait_again = 0;
 
@@ -353,7 +354,8 @@ int main(int argc, char *argv[])
                                 /* Only respond here if I'm not the master and thus this package was not sent by me. */
                                 if (g_master_id != g_id) {
                                     printf("-> SYNC to '%d'.\n", sender_id);
-                                    ns_send_SYNC(g_sock, g_sa, g_id, get_time(), psa);
+                                    g_client_sync_time = get_time();
+                                    ns_send_SYNC(g_sock, g_sa, g_id, g_client_sync_time, psa);
                                 }
                             }
                             break;
@@ -364,7 +366,7 @@ int main(int argc, char *argv[])
                                 /* Add this timestamp to received sync timestamps */
                                 master_sync_timestamps.push_back(net2time(pack.payload.time));
                             } else { /* I'm a slave */
-                                time_val time_sync_diff = net2time(pack.payload.time) - get_time();
+                                time_val time_sync_diff = net2time(pack.payload.time) - g_client_sync_time;
                                 adjust_time(time_sync_diff);
                                 hello_wait_time += time_sync_diff;
                                 //election_wait_time += time_sync_diff;
