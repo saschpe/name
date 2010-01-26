@@ -115,13 +115,17 @@ static void peers_cleanup(std::map<unsigned short, ns_peer_t> &peers)
 {
     //printf("   Check for clients which have not sent a HELLO recently...\n");
     time_val now_time = get_time();
+    int start_e = 0;
     for (std::map<unsigned short, ns_peer_t>::iterator it = peers.begin(); it != peers.end(); it++) {
         // Difference is current time minus last time seen
         if ((now_time - (*it).second.last_hello) > NS_HELLO_LAST_TIME_DIFFERENCE) {
             printf("   Missing HELLO from '%d', remove from list\n", (*it).first);
             peers.erase(it);
-            start_election();
+            start_e = 1;
         }
+    }
+    if (start_e) {
+        start_election();
     }
 }
 
