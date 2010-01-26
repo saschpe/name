@@ -4,11 +4,8 @@
 #include <map>
 #include <vector>
 
-#include <arpa/inet.h>
 #include <limits.h>
-#include <netinet/in.h>
 #include <poll.h>
-#include <stdarg.h>
 #include <stdio.h>
 #include <stdlib.h>
 #include <string.h>
@@ -59,22 +56,6 @@ static void parse_cmdline_args(int argc, char *argv[])
     }
 }
 
-void print(const char *format, ...)
-{
-    va_list ap;
-    va_start(ap, format);
-    //printf("%d.5 %s %s %d.5 %s ", g_id, time, sender_ip, sender_id, sender_name);
-    time_val now = get_time();
-    int hours = now / 1000 / 1000 / 60 / 60 / 24;
-    int mins = now;
-    int secs = 0;
-    int msecs = 0;
-
-    printf("%d %2d:%2d:%2d.%3d ", g_id, hours, mins, secs, msecs);
-    va_end(ap);
-    vprintf(format, ap);
-}
-
 /**
  * Simple helper function
  */
@@ -85,20 +66,20 @@ static void start_election()
     g_wait_again = 1;
     g_wait_for_master = 0;
     ns_send_START_ELECTION(g_sock, g_sa, g_id);
-    print("-> START_ELECTION\n");
+    printf("-> START_ELECTION\n");
 }
 
 static void send_master()
 {
     g_wait_for_master = 0;
     ns_send_MASTER(g_sock, g_sa, g_id);
-    print("-> MASTER\n");
+    printf("-> MASTER\n");
 }
 
 static void send_hello()
 {
     ns_send_HELLO(g_sock, g_sa, g_id);
-    print("-> HELLO\n");
+    printf("-> HELLO\n");
 }
 
 static void peers_add(std::map<unsigned short, ns_peer_t> &peers, unsigned short id)
@@ -209,7 +190,7 @@ int main(int argc, char *argv[])
                     g_master_in_sync = 1;
                     master_sync_timestamps.clear();
                     master_sync_timestamps.push_back(get_time());
-                    printf("-> START_SYNC.\n");
+                    printf("-> START_SYNC\n");
                     ns_send_START_SYNC(g_sock, g_sa, g_id);
                     sync_time_wait_time = get_time() + NS_TIME_SYNC_TIMEOUT;
                 } else {
@@ -222,7 +203,7 @@ int main(int argc, char *argv[])
                             sum += *it;
                         }
                         time_val new_time = sum / master_sync_timestamps.size();
-                        printf("-> SYNC (master).\n");
+                        printf("-> SYNC (master)\n");
                         ns_send_SYNC(g_sock, g_sa, g_id, new_time);
                         g_master_in_sync = 0;
                     }
